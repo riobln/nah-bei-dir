@@ -1,0 +1,1730 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#000000">
+<meta name="referrer" content="no-referrer">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-title" content="Nah bei dir">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Nah bei dir</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&display=swap">
+<style>
+/* Layout (from the Figma design): navigation row on top (tabs left, theme + settings right),
+   the active area fills the rest of the screen. Calm: only short, soft transitions (see the end).
+   Colour: dark by default; a light variant via the contrast button, remembered per device. */
+:root {
+  color-scheme: dark;
+  --bg: #11161E;
+  --tile: #2E3846;          /* phrase tiles, cards */
+  --fg: #E8F0EE;            /* text on tiles */
+  --nav-fg: #E3EDFF;        /* navigation and outline buttons */
+  --muted: #9EAABB;
+  --outline: #2E3846;       /* 2px borders of inactive tabs and secondary buttons */
+  --primary-bg: #E3EDFF;
+  --primary-fg: #11161E;
+  --accent: #9CA5EB;        /* sender names, status lines */
+  --danger: #F8C5C0;
+  --divider: rgba(255, 255, 255, .2);
+  --focus: #E3EDFF;         /* keyboard / switch-control focus ring */
+  --yes-bg: #12703E;  --yes-fg: #96F0B7;
+  --no-bg: #A72218;   --no-fg: #F8C5C0;
+  --font: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 16px;      /* tiles, cards, Ja/Nein */
+  --radius-btn: 8px;   /* tabs and buttons */
+  --gap: 16px;
+}
+body.light {
+  color-scheme: light;
+  --bg: #DAD9D6;
+  --tile: #BFBDB7;
+  --fg: #302D27;
+  --nav-fg: #302D27;
+  --muted: #5F5B54;
+  --outline: #9B9995;
+  --primary-bg: #353432;
+  --primary-fg: #DAD9D6;
+  --accent: #4E54A6;
+  --danger: #A72218;
+  --divider: rgba(0, 0, 0, .15);
+  --focus: #11161E;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font);
+  font-size: 20px; line-height: 1.3; font-weight: 400;
+  -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+}
+* { box-sizing: border-box; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+svg { flex: none; }
+
+/* Navigation */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 11; background: var(--bg); }
+.navbar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg);
+  padding-block: var(--gap) 0;
+  padding-left: max(var(--gap), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gap), env(safe-area-inset-right, 0px));
+}
+.navrow { display: flex; align-items: center; justify-content: space-between; gap: var(--gap); max-width: calc(1400px - 2 * var(--gap)); margin: 0 auto; }   /* same content width as .app */
+.tabs { display: flex; flex-wrap: wrap; gap: var(--gap); min-width: 0; }
+.tab, .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 16px 32px; border-radius: var(--radius-btn);
+  font-size: 24px; font-weight: 600; line-height: 1.3; white-space: nowrap;
+  border: 2px solid var(--outline); color: var(--nav-fg); background: transparent;
+}
+.tab { padding: 14px 30px; }   /* 2px border inside the 64px height */
+.tab svg, .btn svg { width: 32px; height: 32px; }
+.tab[aria-selected="true"], .btn.primary { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+.tools { display: flex; gap: var(--gap); }
+.icon-btn {
+  position: relative; display: inline-flex; padding: 16px; border-radius: var(--radius-btn); color: var(--nav-fg);
+  overflow: hidden; isolation: isolate;
+}
+.icon-btn svg { width: 32px; height: 32px; }
+.icon-btn .fill { position: absolute; inset: 0; background: var(--primary-bg); opacity: .35; transform: scaleY(0); transform-origin: bottom; z-index: -1; }
+#care-open { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#care-open svg { pointer-events: none; }
+.icon-btn.pressing .fill { transform: scaleY(1); transition: transform 1.5s linear; }
+@media (max-width: 760px) {
+  .tab, .btn { font-size: 19px; padding: 12px 18px; gap: 8px; }
+  .tab { padding: 10px 16px; }
+  .tab svg, .btn svg { width: 26px; height: 26px; }
+  .icon-btn { padding: 12px; }
+  .icon-btn svg { width: 26px; height: 26px; }
+}
+@media (max-width: 520px) { .tab .label { display: none; } .tab { padding: 10px 14px; } }
+
+/* Page */
+.app {
+  min-height: calc(100% - 80px); display: flex; flex-direction: column;
+  padding-block: 32px var(--gap);
+  padding-left: max(var(--gap), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gap), env(safe-area-inset-right, 0px));
+  max-width: 1400px; margin: 0 auto;
+}
+.view { flex: 1; display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+/* detail views (Satz, Bild, Nachricht): 32px above and below the button bar, as in the design */
+#say, #viewer, #reader { gap: 32px; padding-bottom: 16px; }
+.bar { display: flex; gap: var(--gap); justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.bar .middle { flex: 1; text-align: center; color: var(--muted); font-size: 20px; min-width: 0; overflow-wrap: anywhere; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn .mirror { transform: scaleX(-1); }
+
+/* Sprechen */
+/* Phrases come in pages of 3 rows; swipe sideways (or tap the arrows) for the next page. */
+.phrases {
+  flex: 1 1 0; min-height: calc(3 * 120px + 2 * var(--gap)); display: flex; gap: var(--gap);
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.phrases::-webkit-scrollbar { display: none; }
+.ppage {
+  flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always;
+  display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: var(--gap);
+}
+.pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding-block: 12px; }
+.pager .icon-btn { padding: 8px; }
+.pager .icon-btn:disabled { opacity: .3; cursor: default; }
+.pager-mid { display: flex; align-items: baseline; gap: 10px; min-width: 280px; justify-content: center; text-align: center; }
+.pager-title { font-size: 24px; font-weight: 600; color: var(--nav-fg); line-height: 1.25; }
+.pager-count { font-size: 18px; font-weight: 600; color: var(--nav-fg); opacity: .6; }
+@media (max-width: 600px) { .pager-title { font-size: 21px; } .pager-count { font-size: 16px; } .pager-mid { min-width: 0; } }
+.phrase {
+  background: var(--tile); color: var(--fg); border-radius: var(--radius); padding: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  font-size: 24px; font-weight: 600; line-height: 1.3; text-align: center; text-wrap: balance; overflow-wrap: anywhere;
+  min-height: 0; overflow: hidden;
+}
+.phrase svg { width: 40px; height: 40px; }
+@media (max-width: 600px) { .phrase { font-size: 20px; } }
+.yesno { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+.big {
+  height: clamp(104px, 16vh, 144px); border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  font-size: 48px; font-weight: 600; line-height: 1.2;
+}
+.big svg { width: 64px; height: 64px; }
+.big.yes { background: var(--yes-bg); color: var(--yes-fg); }
+.big.no { background: var(--no-bg); color: var(--no-fg); }
+@media (max-width: 600px) { .big { height: 110px; font-size: 36px; } .big svg { width: 48px; height: 48px; } }
+
+/* Gesagt */
+.said {
+  flex: 1; min-height: 280px; border-radius: var(--radius); background: var(--tile); color: var(--fg); padding: 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  text-align: center; font-size: clamp(40px, 6.7vw, 72px); font-weight: 600; line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere;
+}
+.said svg { width: 128px; height: 128px; }
+@media (max-width: 600px) { .said svg { width: 88px; height: 88px; } }
+.said.yes { background: var(--yes-bg); color: var(--yes-fg); }
+.said.no { background: var(--no-bg); color: var(--no-fg); }
+
+/* Bilder */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
+@media (max-width: 600px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+.tile {
+  position: relative; aspect-ratio: 338 / 387; max-width: 100%; border-radius: var(--radius); overflow: hidden;
+  background: var(--tile);
+}
+.tile img, .tile video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.tile .play {
+  position: absolute; inset: 0; margin: auto; width: 72px; height: 72px; border-radius: 50%;
+  background: var(--primary-bg); color: var(--primary-fg); display: flex; align-items: center; justify-content: center;
+}
+.tile .play svg { width: 32px; height: 32px; margin-left: 4px; }
+.frame {
+  flex: 1; min-height: 280px; background: var(--tile); border-radius: var(--radius); overflow: hidden;
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.frame img, .frame video { max-width: 100%; max-height: 100%; display: block; position: absolute; inset: 0; margin: auto; }
+#stage { touch-action: pan-y; }   /* let horizontal swipes reach the page instead of the browser */
+#stage img { -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
+
+/* Nachrichten: one row per message — sender and date on the left, the text beside it, a check when read */
+#view-nachrichten #messages { display: flex; flex-direction: column; min-height: 0; }
+.mlist { display: flex; flex-direction: column; gap: 16px; }
+.msg {
+  text-align: left; background: var(--tile); color: var(--nav-fg); border: 1px solid transparent; border-radius: var(--radius);
+  padding: 16px; display: flex; align-items: flex-start; gap: 16px; min-width: 0;
+}
+.msg .meta { flex: 0 0 320px; display: flex; flex-direction: column; min-width: 0; font-size: 20px; }
+.msg .from { font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg .when { line-height: 1.4; opacity: .5; }
+.msg .text {
+  flex: 1; min-width: 0; font-size: 24px; line-height: 1.4; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.msg .check { width: 32px; height: 32px; flex: none; color: var(--nav-fg); visibility: hidden; }
+.msg.read .check { visibility: visible; }
+.msg.read .text { opacity: .5; }
+@media (max-width: 860px) { .msg .meta { flex-basis: 220px; } }
+@media (max-width: 640px) { .msg { flex-wrap: wrap; } .msg .meta { flex: 1 1 calc(100% - 48px); } .msg .text { flex-basis: 100%; order: 3; } }
+.page {
+  flex: 1; min-height: 280px; overflow-y: auto; background: var(--tile); color: var(--nav-fg);
+  border-radius: var(--radius); padding: 24px 32px; -webkit-user-select: text; user-select: text;
+}
+.page .from { font-weight: 600; font-size: 32px; line-height: 1.25; }
+.page .when { font-size: 20px; line-height: 1.4; opacity: .5; margin-bottom: 32px; }
+.page .text { font-size: clamp(28px, 3.7vw, 40px); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 820px; }
+
+.empty {
+  border: 2px dashed var(--outline); border-radius: var(--radius); padding: 40px 24px;
+  text-align: center; color: var(--muted); font-size: 22px; text-wrap: balance;
+}
+.loading, .sync { color: var(--muted); font-size: 18px; margin: 0; }
+.sync { text-align: center; }
+
+/* Angehörige: full width, navigation hidden while it is open */
+body.care-open .navbar { display: none; }
+body.care-open .app { padding-top: 20px; }
+#care .inner { width: 100%; display: flex; flex-direction: column; gap: 22px; -webkit-user-select: text; user-select: text; }
+#care h2 { font-size: 26px; font-weight: 700; line-height: 1.25; margin: 0; }
+#care h3 { font-size: 20px; font-weight: 600; line-height: 1.3; margin: 0; color: var(--fg); }
+#care .note { color: var(--fg); font-size: 20px; line-height: 1.4; margin: 0; }
+#care-close { font-size: 21px; font-weight: 700; }
+.card { background: var(--tile); color: var(--fg); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; align-items: stretch; gap: 14px; min-width: 0; }
+.card > .btn { align-self: flex-start; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 16px; color: var(--muted); font-weight: 700; line-height: 1.3; }
+.field input[type="text"], .field textarea, .field select {
+  border: 0; border-radius: var(--radius-btn); background: var(--bg); color: var(--fg); padding: 12px 14px; font-size: 20px; line-height: 1.4; width: 100%;
+}
+.field select { line-height: normal; padding-block: 0; }
+.field input::placeholder, .field textarea::placeholder { color: var(--muted); opacity: 1; }
+.field textarea { min-height: 140px; resize: vertical; }
+/* one height for every single-line control, so fields, dropdowns and buttons in a row share a baseline */
+.field input[type="text"], .field select, .filefield, .btn.small { height: 52px; min-height: 52px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.row > .field { flex: 1 1 220px; }
+.btn.small { font-size: 18px; padding: 0 18px; gap: 8px; }
+.btn.small svg { width: 24px; height: 24px; }
+.card .btn:not(.primary):not(.danger) { border-color: var(--nav-fg); color: var(--fg); background: transparent; }
+.btn.danger { color: var(--no-fg); border-color: var(--no-bg); background: var(--no-bg); font-size: 17px; font-weight: 700; }
+.status { font-size: 16px; line-height: 1.4; color: var(--fg); min-height: 1.4em; margin: 0; }
+.status.err { color: var(--danger); }
+.list { display: flex; flex-direction: column; gap: 14px; }
+.item { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.item .thumb { width: 72px; height: 54px; border-radius: var(--radius-btn); object-fit: cover; background: var(--bg); flex: none; }
+.item .label { flex: 1; min-width: 0; font-size: 20px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item svg { width: 28px; height: 28px; flex: none; }
+#phr-list .item + .item, #msg-list .item + .item, #media-list .item + .item { border-top: 1px solid var(--divider); padding-top: 14px; }
+.item .label b { font-weight: 600; }
+.item .sub { color: var(--muted); font-weight: 400; }   /* "· Google Drive", "· ausgeblendet" */
+.item .noicon { width: 28px; flex: none; }
+.item.off .thumb, .item.off > svg, .item.off .label { opacity: .45; }
+/* row buttons: 48 × 48 with a 24px icon (up / down, hide, delete) */
+.item .actions { display: flex; gap: 8px; flex: none; }
+.card .btn.icon { width: 48px; height: 48px; min-height: 48px; padding: 0; flex: none; }
+.btn.icon:disabled { opacity: .3; cursor: default; }
+.btn.icon.up svg { transform: rotate(180deg); }
+.card .btn.icon[data-armed] { width: auto; padding: 0 16px; }   /* "Wirklich löschen?" */
+.pgroup + .pgroup { border-top: 1px solid var(--divider); }
+.pgroup summary {
+  list-style: none; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 16px 0; box-sizing: content-box; cursor: pointer;
+  font-size: 20px; font-weight: 600; color: var(--fg); border-radius: var(--radius-btn);
+}
+.pgroup summary::-webkit-details-marker { display: none; }
+.pgroup summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pgroup .gcount { font-size: 16px; font-weight: 400; color: var(--muted); }
+.pgroup .gchev { width: 24px; height: 24px; margin-left: auto; transition: transform .2s ease; }
+.pgroup[open] .gchev { transform: rotate(180deg); }
+.gitems { display: flex; flex-direction: column; gap: 14px; padding: 0 0 16px; }
+#phr-list { gap: 0; }
+@media (max-width: 600px) {   /* phone: the phrase on its own line, buttons below it */
+  #phr-list .item { flex-wrap: wrap; row-gap: 10px; }
+  #phr-list .item .label { flex: 1 1 calc(100% - 40px); white-space: normal; }
+  #phr-list .item .actions { margin-left: auto; }
+}
+
+.iconpick { position: relative; }
+.iconpick-btn {
+  width: 100%; height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  background: var(--bg); color: var(--fg); border-radius: var(--radius-btn); font-size: 20px; line-height: 1.4; text-align: left;
+}
+.iconpick-btn .ic svg { width: 28px; height: 28px; display: block; }
+.iconpick-btn .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iconpick-btn > svg { width: 24px; height: 24px; }
+.iconpick-btn[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.iconpick-btn:focus-visible, .iconpick-menu button:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+.iconpick-menu {
+  position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: min(420px, 90vw); max-height: 380px; overflow-y: auto;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 8px;
+  background: var(--bg); border-radius: var(--radius-btn); box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+}
+.iconpick-menu button {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-btn);
+  color: var(--fg); font-size: 18px; line-height: 1.3; text-align: left;
+}
+.iconpick-menu button svg { width: 28px; height: 28px; flex: none; }
+.iconpick-menu button[aria-selected="true"] { background: var(--tile); }
+@media (hover: hover) { .iconpick-menu button:hover { background: var(--tile); } }
+.card:has(.iconpick-menu:not([hidden])) { overflow: visible; }
+.selectwrap { position: relative; display: block; }
+.selectwrap select { -webkit-appearance: none; appearance: none; padding-right: 50px; cursor: pointer; }
+.selectwrap svg { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; color: var(--fg); pointer-events: none; }
+.filefield {
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--bg); color: var(--muted); border-radius: var(--radius-btn); padding: 0 14px; font-size: 20px; line-height: 1.4; cursor: pointer;
+}
+.filefield span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.filefield.has-files { color: var(--fg); }
+.filefield svg { width: 24px; height: 24px; color: var(--fg); }
+.filefield input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+
+/* Focus: a clear ring for keyboard, switch control and other assistive input (not shown after a plain tap). */
+:focus { outline: none; }
+.tab:focus-visible, .btn:focus-visible, .icon-btn:focus-visible, .phrase:focus-visible, .big:focus-visible,
+.tile:focus-visible, .msg:focus-visible {
+  outline: 3px solid var(--focus); outline-offset: 3px;
+}
+.big:focus-visible, .tile:focus-visible { outline-offset: 4px; }
+.phrase:focus-visible, .msg:focus-visible { outline-offset: -4px; }   /* inside: these sit in a swipe area that clips the edges */
+.field input[type="text"]:focus, .field textarea:focus, .field select:focus, .filefield:focus-within {
+  outline: 2px solid var(--focus); outline-offset: 0;
+}
+@media (hover: hover) {
+  .tab:not([aria-selected="true"]):hover, .btn:not(.primary):not(.danger):not(:disabled):hover, .icon-btn:not(#care-open):hover { background-color: var(--tile); }
+  .btn.primary:hover, .tab[aria-selected="true"]:hover, .btn.danger:hover, .phrase:hover, .msg:hover, .tile:hover { filter: brightness(1.08); }
+}
+
+/* Gentle motion: short, soft, never bouncy. Everything ends in its normal resting state. */
+:root { --ease: cubic-bezier(.2, .7, .2, 1); }
+body, .navbar, body::before { transition: background-color .35s ease, color .35s ease; }
+.tab, .btn, .icon-btn, .phrase, .big, .tile, .msg, .card, .said, .page, .frame, .field input, .field textarea, .field select {
+  transition: background-color .35s ease, color .35s ease, border-color .35s ease, transform .18s var(--ease), opacity .18s ease;
+}
+.phrase:active, .big:active, .tile:active, .msg:active, .btn:active:not(:disabled), .tab:active, .icon-btn:not(#care-open):active { transform: scale(0.97); transition-duration: .08s; }
+@keyframes nbd-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes nbd-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nbd-grow { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.app > .view:not([hidden]) { animation: nbd-in .28s var(--ease) backwards; }
+.said > * { animation: nbd-grow .32s var(--ease) backwards; }
+.said > span { animation-delay: .04s; }
+.frame img, .frame video { animation: nbd-fade .3s ease backwards; }
+.tile img, .tile video { animation: nbd-fade .4s ease backwards; }
+.phrases .phrase, .grid .tile, .mlist .msg { animation: nbd-in .3s var(--ease) backwards; }
+.phrases .phrase:nth-child(4n+2), .grid .tile:nth-child(3n+2), .mlist .msg:nth-child(2) { animation-delay: .03s; }
+.phrases .phrase:nth-child(4n+3), .grid .tile:nth-child(3n+3), .mlist .msg:nth-child(3) { animation-delay: .06s; }
+.phrases .phrase:nth-child(4n+4), .mlist .msg:nth-child(n+4) { animation-delay: .09s; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<header class="navbar">
+  <div class="navrow">
+    <nav class="tabs" role="tablist" aria-label="Bereiche">
+      <button class="tab" role="tab" id="tab-sprechen" data-tab="sprechen" aria-selected="true"><i data-ui="tab-sprechen"></i><span class="label">Sprechen</span></button>
+      <button class="tab" role="tab" id="tab-bilder" data-tab="bilder" aria-selected="false"><i data-ui="tab-bilder"></i><span class="label">Bilder</span></button>
+      <button class="tab" role="tab" id="tab-nachrichten" data-tab="nachrichten" aria-selected="false"><i data-ui="tab-nachrichten"></i><span class="label">Nachrichten</span></button>
+    </nav>
+    <div class="tools">
+      <button class="icon-btn" id="theme-toggle" aria-label="Hell oder dunkel umschalten"><i data-ui="kontrast"></i></button>
+      <button class="icon-btn" id="care-open" aria-label="Bereich für Angehörige, gedrückt halten"><span class="fill"></span><i data-ui="einstellungen"></i></button>
+    </div>
+  </div>
+</header>
+
+<div class="app">
+  <section class="view" id="view-sprechen">
+    <div class="phrases" id="phrases" aria-label="Sätze"></div>
+    <div class="pager" id="pager" hidden>
+      <button class="icon-btn" id="page-prev" aria-label="Vorherige Seite"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M168,48V208a8,8,0,0,1-13.66,5.66l-80-80a8,8,0,0,1,0-11.32l80-80A8,8,0,0,1,168,48Z"/></svg></button>
+      <div class="pager-mid"><span class="pager-title" id="page-title" aria-live="polite"></span><span class="pager-count" id="page-count"></span></div>
+      <button class="icon-btn" id="page-next" aria-label="Nächste Seite"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M181.66,133.66l-80,80A8,8,0,0,1,88,208V48a8,8,0,0,1,13.66-5.66l80,80A8,8,0,0,1,181.66,133.66Z"/></svg></button>
+    </div>
+    <div class="yesno">
+      <button class="big yes" data-say="Ja" data-tone="yes" data-ui-icon="ja"><i data-ui="ja"></i>Ja</button>
+      <button class="big no" data-say="Nein" data-tone="no" data-ui-icon="nein"><i data-ui="nein"></i>Nein</button>
+    </div>
+  </section>
+
+  <section class="view" id="view-bilder" hidden>
+    <p class="sync" data-sync hidden>Schaue nach Neuem …</p>
+    <div id="media"><p class="loading">Bilder werden geladen …</p></div>
+  </section>
+
+  <section class="view" id="view-nachrichten" hidden>
+    <p class="sync" data-sync hidden>Schaue nach Neuem …</p>
+    <div id="messages"><p class="loading">Nachrichten werden geladen …</p></div>
+  </section>
+
+  <section class="view" id="say" hidden aria-label="Gesagt">
+    <div class="said" id="said"></div>
+    <div class="bar">
+      <button class="btn" id="say-close"><i data-ui="zurueck"></i>Zurück</button>
+      <button class="btn primary" id="say-again"><i data-ui="lautsprecher"></i>Nochmal sagen</button>
+    </div>
+  </section>
+
+  <section class="view" id="viewer" hidden aria-label="Bild ansehen">
+    <div class="frame" id="stage"></div>
+    <div class="bar">
+      <button class="btn" id="prev"><i data-ui="zurueck"></i>Vorheriges</button>
+      <span class="middle" id="viewer-pos"></span>
+      <button class="btn" id="next">Nächstes<i data-ui="zurueck" data-mirror></i></button>
+    </div>
+  </section>
+
+  <section class="view" id="reader" hidden aria-label="Nachricht lesen">
+    <div class="page"><div class="from" id="r-from"></div><div class="when" id="r-when"></div><div class="text" id="r-text"></div></div>
+    <div class="bar">
+      <button class="btn" id="reader-close"><i data-ui="zurueck"></i>Zurück</button>
+      <button class="btn primary" id="read-aloud"><i data-ui="lautsprecher"></i>Vorlesen</button>
+    </div>
+  </section>
+
+  <section class="view" id="care" hidden aria-label="Bereich für Angehörige">
+  <div class="inner">
+    <div class="bar"><h2>Für Angehörige</h2><button class="btn" id="care-close">Fertig</button></div>
+    <p class="note" id="care-mode"></p>
+
+    <div class="card" id="card-drive">
+      <h3>Google Drive</h3>
+      <p class="note">Fotos, Videos und Texte im Google-Drive-Ordner „Nah bei dir“ erscheinen hier automatisch, sobald „Bilder“ oder „Nachrichten“ geöffnet wird.</p>
+      <div class="row"><button class="btn small" id="drive-now">Jetzt nachsehen</button></div>
+      <p class="status" id="drive-status"></p>
+    </div>
+
+    <div class="card" id="card-msg">
+      <h3>Nachricht schreiben</h3>
+      <div class="field"><label for="m-from">Von</label><input type="text" id="m-from" placeholder="z. B. Anna"></div>
+      <div class="field"><label for="m-text">Nachricht</label><textarea id="m-text" placeholder="Kurze, klare Sätze lesen sich am leichtesten."></textarea></div>
+      <div class="row"><button class="btn small primary" id="m-save">Nachricht speichern</button></div>
+      <p class="status" id="m-status"></p>
+      <div class="list" id="msg-list"></div>
+    </div>
+
+    <div class="card" id="card-phr">
+      <h3>Sätze zum Sprechen</h3>
+      <p class="note">Ja und Nein stehen immer unten. Die Sätze darüber sind in Gruppen sortiert; jede Gruppe ist eine eigene Seite, zu der man wischt oder mit den Pfeilen blättert.</p>
+      <div class="row">
+        <div class="field"><label for="p-text">Neuer Satz</label><input type="text" id="p-text" placeholder="z. B. Ruf bitte Anna an"></div>
+        <div class="field" style="flex:0 1 280px"><label for="p-icon-btn">Symbol</label><input type="hidden" id="p-icon" value=""><div class="iconpick" id="p-iconpick"><button type="button" class="iconpick-btn" id="p-icon-btn" aria-haspopup="listbox" aria-expanded="false"><span class="ic" id="p-icon-cur"></span><span class="lbl" id="p-icon-label">Kein Symbol</span><i data-ui="chevron"></i></button><div class="iconpick-menu" id="p-icon-menu" role="listbox" aria-label="Symbol wählen" hidden></div></div></div>
+        <div class="field" style="flex:0 1 240px"><label for="p-group">Gruppe</label><span class="selectwrap"><select id="p-group"></select><i data-ui="chevron"></i></span></div>
+        <button class="btn small primary" id="p-add">Hinzufügen</button>
+      </div>
+      <p class="status" id="p-status"></p>
+      <div class="list" id="phr-list"></div>
+      <div class="row"><button class="btn small" id="p-reset">Standardsätze wiederherstellen</button></div>
+    </div>
+
+    <div class="card" id="card-media">
+      <h3>Foto oder Video direkt hinzufügen</h3>
+      <div class="row">
+        <div class="field"><label for="f-file">Dateien</label>
+          <label class="filefield" id="f-field"><input type="file" id="f-file" accept="image/*,video/mp4,video/webm,video/quicktime" multiple><span id="f-name">Keine Datei ausgewählt</span><i data-ui="chevron"></i></label>
+        </div>
+      </div>
+      <div class="row"><button class="btn small primary" id="f-upload">Hinzufügen</button></div>
+      <p class="status" id="f-status"></p>
+      <div class="list" id="media-list"></div>
+    </div>
+
+    <div class="card" id="card-voice">
+      <h3>Stimme</h3>
+      <p class="note">Die Sätze und Nachrichten werden immer mit dieser Stimme dieses Geräts vorgelesen. Auf dem iPad gibt es bessere Stimmen zum Herunterladen: Einstellungen → Bedienungshilfen → Gesprochene Inhalte → Stimmen → Deutsch, zum Beispiel „Anna (Premium)“. Danach diese Seite neu laden.</p>
+      <div class="row">
+        <div class="field"><label for="v-voice">Stimme</label><span class="selectwrap"><select id="v-voice"></select><i data-ui="chevron"></i></span></div>
+        <div class="field" style="flex:0 1 200px"><label for="v-rate">Tempo</label>
+          <span class="selectwrap"><select id="v-rate">
+            <option value="0.7">Sehr langsam</option>
+            <option value="0.85">Langsam</option>
+            <option value="1">Normal</option>
+          </select><i data-ui="chevron"></i></span>
+        </div>
+        <button class="btn small" id="v-test">Probe hören</button>
+      </div>
+      <p class="status" id="v-status"></p>
+    </div>
+  </div>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- Icons ---------- */
+/* Navigation, Ja/Nein and button icons from the Figma design (filled, theme colour via currentColor). */
+const UI_ICONS = {"gelesen":{"vb":"0 0 32 32","body":"<path d=\"M16 2.66667C8.6362 2.66667 2.66667 8.6362 2.66667 16C2.66667 23.3637 8.6362 29.3333 16 29.3333C23.3637 29.3333 29.3333 23.3637 29.3333 16C29.3333 8.6362 23.3637 2.66667 16 2.66667ZM20.774 13.2999C21.1237 12.8725 21.0607 12.2424 20.6332 11.8927C20.2057 11.543 19.5757 11.606 19.226 12.0334L13.9257 18.5116L12.0404 16.6263C11.6499 16.2357 11.0167 16.2357 10.6262 16.6263C10.2357 17.0168 10.2357 17.6499 10.6262 18.0404L13.2929 20.7071C13.4927 20.9069 13.7676 21.0128 14.0499 20.9988C14.332 20.9847 14.5951 20.8519 14.774 20.6332L20.774 13.2999Z\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"currentColor\"/>"},"tab-sprechen":{"vb":"0 0 32 32","body":"<path d=\"M16 3.33333C23.3107 3.33333 29.3333 8.95276 29.3333 16C29.3333 23.0472 23.3107 28.6667 16 28.6667C14.0452 28.6667 12.1848 28.2664 10.5078 27.5456C10.0502 27.3489 9.56052 27.2984 9.11197 27.4024C7.81711 27.7025 6.48715 27.8921 5.09896 27.9779C4.7594 27.9988 4.43177 27.8459 4.23047 27.5716C4.02952 27.2975 3.98123 26.9399 4.10287 26.6224C4.43628 25.7528 4.72849 24.8913 4.95443 24.0235C5.05905 23.6216 4.9556 23.1245 4.63021 22.6211C3.38617 20.6967 2.66667 18.428 2.66667 16C2.66667 8.95276 8.68929 3.33333 16 3.33333Z\" fill=\"currentColor\"/>"},"tab-bilder":{"vb":"0 0 32 32","body":"<path d=\"M17.2281 8.43904C19.2223 8.08751 21.1237 9.41888 21.4755 11.413L23.5588 23.2307C23.9105 25.2249 22.5792 27.1264 20.5849 27.4781L8.76717 29.5628C6.77301 29.9141 4.8714 28.5816 4.51979 26.5875L2.43645 14.7697C2.08512 12.7757 3.41631 10.874 5.4104 10.5224L17.2281 8.43904ZM10.3831 20.6227C9.40931 19.9409 8.07855 20.1001 7.29321 20.9924L5.85312 22.6304L6.48983 26.2411C6.64983 27.1472 7.51339 27.7521 8.41952 27.5927L17.9404 25.9143L10.3831 20.6227ZM18.0576 15.0628C17.8017 13.6124 16.4181 12.6429 14.9677 12.8987C13.5175 13.1546 12.5492 14.5383 12.8049 15.9885C13.0608 17.4388 14.4444 18.4071 15.8948 18.1513C17.3447 17.8953 18.3129 16.5128 18.0576 15.0628Z\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"currentColor\"/> <path d=\"M10.5198 5.413C10.8716 3.41908 12.7732 2.08775 14.7672 2.43904L26.5849 4.52237C28.5792 4.87401 29.9105 6.77679 29.5588 8.77107L27.4755 20.5888C27.2708 21.7487 26.5399 22.6809 25.5732 23.1916C25.5608 23.0891 25.5471 22.986 25.5289 22.8831L23.4443 11.0653C22.9005 7.98377 19.9621 5.92579 16.8804 6.46899L10.1226 7.6604L10.5198 5.413Z\" fill=\"currentColor\"/>"},"tab-nachrichten":{"vb":"0 0 32 32","body":"<path d=\"M6.33333 5.33333C4.30829 5.33333 2.66667 6.97496 2.66667 9V9.05251L15.2508 15.3845C15.7221 15.6217 16.2779 15.6217 16.7491 15.3845L29.3333 9.05251V9C29.3333 6.97496 27.6917 5.33333 25.6667 5.33333H6.33333Z\" fill=\"currentColor\"/> <path d=\"M29.3333 11.2914L17.6481 17.1712C16.6113 17.6928 15.3887 17.6928 14.3519 17.1712L2.66667 11.2914V23C2.66667 25.0251 4.30829 26.6667 6.33333 26.6667H25.6667C27.6917 26.6667 29.3333 25.0251 29.3333 23V11.2914Z\" fill=\"currentColor\"/>"},"kontrast":{"vb":"0 0 32 32","body":"<path d=\"M16 4.66667C9.74077 4.66667 4.66667 9.74077 4.66667 16C4.66667 22.2592 9.74077 27.3333 16 27.3333V4.66667ZM2.66667 16C2.66667 8.6362 8.6362 2.66667 16 2.66667C16.3633 2.66667 16.7236 2.68123 17.08 2.70983C23.9392 3.2602 29.3333 8.99967 29.3333 16C29.3333 23.0003 23.9392 28.7397 17.08 29.2901C16.7236 29.3188 16.3633 29.3333 16 29.3333C8.6362 29.3333 2.66667 23.3637 2.66667 16Z\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"currentColor\"/>"},"einstellungen":{"vb":"0 0 32 32","body":"<path d=\"M24.4948 17.3333C24.9101 17.3335 25.2824 17.5907 25.4296 17.9792L25.7227 18.7513C25.8912 19.1953 26.3488 19.4601 26.8177 19.3841L27.6341 19.2513C28.044 19.1848 28.4524 19.3785 28.6601 19.7383L29.0637 20.4388C29.2659 20.7889 29.2381 21.226 28.9921 21.5469L28.4296 22.28C28.1476 22.648 28.1557 23.1617 28.4492 23.5208L29.0625 24.2721C29.3253 24.5939 29.3625 25.0451 29.1549 25.4049L28.75 26.1055C28.5477 26.4553 28.1545 26.6489 27.7539 26.5964L26.8385 26.4765C26.3788 26.4163 25.9379 26.68 25.7735 27.1133L25.4296 28.0208C25.2825 28.4093 24.9101 28.6664 24.4948 28.6667H23.6861C23.282 28.6667 22.9167 28.4228 22.7617 28.0495L22.3541 27.0664C22.1808 26.6487 21.7479 26.3993 21.2995 26.4584L20.246 26.5964C19.8452 26.6491 19.4509 26.4556 19.2487 26.1055L18.8451 25.4049C18.6373 25.0453 18.6737 24.594 18.9361 24.2721L19.5495 23.5195C19.8421 23.1605 19.8507 22.6477 19.5689 22.28L19.0077 21.5469C18.7621 21.2261 18.7329 20.7888 18.9348 20.4388L19.3399 19.7383C19.5476 19.3787 19.9559 19.1848 20.3659 19.2513L21.3229 19.4076C21.7804 19.4819 22.2297 19.2315 22.4075 18.8033L22.7617 17.9492C22.9168 17.5761 23.2821 17.3333 23.6861 17.3333H24.4948ZM24 20.6667C22.7113 20.6667 21.6667 21.7113 21.6667 23C21.6667 24.2887 22.7113 25.3333 24 25.3333C25.2887 25.3333 26.3333 24.2887 26.3333 23C26.3333 21.7113 25.2887 20.6667 24 20.6667Z\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"currentColor\"/> <path d=\"M16.0025 16.6667C17.1037 16.6667 18.1471 16.8129 19.1211 17.086C17.4184 18.4921 16.3333 20.6193 16.3333 23C16.3333 24.9112 17.0347 26.6573 18.1913 28H8.93096C7.85781 28 6.86727 27.5311 6.22913 26.7708C5.57719 25.9939 5.29844 24.9081 5.707 23.8033C7.249 19.6341 11.0403 16.6667 16.0025 16.6667Z\" fill=\"currentColor\"/> <path d=\"M16 2.66667C19.3136 2.66671 22 5.35299 22 8.66667C22 11.9803 19.3136 14.6667 16 14.6667C12.6864 14.6665 9.99996 11.9803 9.99996 8.66667C9.99996 5.35304 12.6864 2.6668 16 2.66667Z\" fill=\"currentColor\"/>"},"ja":{"vb":"0 0 64 64","body":"<path d=\"M30.9627 5.33333C29.2179 5.33333 27.6123 6.30707 26.8107 7.86288L17.1239 26.6667H10C7.42267 26.6667 5.33333 28.756 5.33333 31.3333V51.3333C5.33333 53.9107 7.42267 56 10 56H46.4587C51.4005 56 55.6013 52.3901 56.3448 47.5045L58.5768 32.8379C59.4979 26.7851 54.8128 21.3333 48.6904 21.3333H37.0456L38.2208 13.7964C38.9152 9.34323 35.4565 5.33333 30.9627 5.33333ZM16 30.6667V52H10C9.63181 52 9.33333 51.7016 9.33333 51.3333V31.3333C9.33333 30.9651 9.63181 30.6667 10 30.6667H16Z\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"currentColor\"/>"},"nein":{"vb":"0 0 64 64","body":"<path d=\"M48.0059 12V33.3333H54.0005C54.3685 33.3333 54.6672 33.0349 54.6672 32.6667V12.6667C54.6672 12.2985 54.3685 12 54.0005 12H48.0059ZM46.8824 37.3333H54.0005C56.5779 37.3333 58.6672 35.244 58.6672 32.6667V12.6667C58.6672 10.0893 56.5779 8 54.0005 8H17.562C12.6213 8 8.42288 11.6107 7.67989 16.4957L5.44917 31.1624C4.52877 37.2139 9.21043 42.6667 15.3313 42.6667H26.9691L25.7946 50.2037C25.1018 54.6493 28.5376 58.6667 33.0376 58.6667C34.7731 58.6667 36.3955 57.7008 37.2011 56.1363L46.8824 37.3333Z\" fill-rule=\"evenodd\" clip-rule=\"evenodd\" fill=\"currentColor\"/>"},"zurueck":{"vb":"0 0 32 32","body":"<path d=\"M16.0013 5.95448V10.3455C21.318 10.4713 25.0113 11.6378 27.318 14.4329C29.6273 17.2313 30.3347 21.4256 30.3347 27.0005C30.3347 27.4644 30.0157 27.8673 29.5644 27.9739C29.1131 28.0804 28.6476 27.8627 28.4403 27.4479L28.4089 27.3853C27.4241 25.4153 26.7961 24.1592 25.2744 23.2613C23.7189 22.3436 21.106 21.7417 16.0013 21.6737V26.0467C16.0013 27.7912 13.9239 28.6995 12.6432 27.5149L1.78255 17.4688C0.926651 16.6771 0.926655 15.3241 1.78255 14.5324L12.6432 4.48628C13.9239 3.30168 16.0013 4.20997 16.0013 5.95448Z\" fill=\"currentColor\"/>"},"lautsprecher":{"vb":"0 0 32 32","body":"<path d=\"M14.6928 4.28223C15.7953 3.48845 17.3333 4.27629 17.3333 5.63479V26.3652C17.3333 27.7236 15.7953 28.5115 14.6928 27.7177L8.11372 22.9808C7.83007 22.7765 7.4894 22.6667 7.13988 22.6667H5C2.97496 22.6667 1.33333 21.0251 1.33333 19V13C1.33333 10.9749 2.97496 9.33331 5 9.33331H7.13988C7.4894 9.33331 7.83007 9.22341 8.11372 9.01919L14.6928 4.28223Z\" fill=\"currentColor\"/> <path d=\"M21.8925 10.108C21.502 9.71748 20.8689 9.71748 20.4784 10.108C20.0879 10.4985 20.0879 11.1317 20.4784 11.5222C21.6256 12.6694 22.3333 14.2513 22.3333 16.0005C22.3333 17.7497 21.6256 19.3317 20.4784 20.4789C20.0879 20.8695 20.0879 21.5025 20.4784 21.8931C20.8689 22.2836 21.502 22.2836 21.8925 21.8931C23.3995 20.3861 24.3333 18.3015 24.3333 16.0005C24.3333 13.6996 23.3995 11.6149 21.8925 10.108Z\" fill=\"currentColor\"/>"},"chevron":{"vb":"0 0 24 24","body":"<path d=\"M17.7197 8.96967C18.0126 8.67678 18.4873 8.67678 18.7802 8.96967C19.0731 9.26256 19.0731 9.73732 18.7802 10.0302L12.5302 16.2802C12.2373 16.5731 11.7626 16.5731 11.4697 16.2802L5.21967 10.0302C4.92678 9.73732 4.92678 9.26256 5.21967 8.96967C5.51256 8.67678 5.98732 8.67678 6.28022 8.96967L11.9999 14.6894L17.7197 8.96967Z\" fill=\"currentColor\"/>"}};
+const uiSvg = (name, extra = '') => UI_ICONS[name] ? `<svg viewBox="${UI_ICONS[name].vb}" fill="none" aria-hidden="true"${extra}>${UI_ICONS[name].body}</svg>` : '';
+document.querySelectorAll('[data-ui]').forEach(el => { el.outerHTML = uiSvg(el.dataset.ui, el.hasAttribute('data-mirror') ? ' class="mirror"' : ''); });
+
+/* Phrase icons: filled, from Phosphor Icons (MIT licence), to match the filled icons of the design.
+   trash, eye and eyeoff are only used for buttons in the Angehörige area (they are not in ICON_NAMES). */
+const ICONS = {"moon":"<path d=\"M235.54,150.21a104.84,104.84,0,0,1-37,52.91A104,104,0,0,1,32,120,103.09,103.09,0,0,1,52.88,57.48a104.84,104.84,0,0,1,52.91-37,8,8,0,0,1,10,10,88.08,88.08,0,0,0,109.8,109.8,8,8,0,0,1,10,10Z\"/>","pain":"<path d=\"M213.85,125.46l-112,120a8,8,0,0,1-13.69-7l14.66-73.33L45.19,143.49a8,8,0,0,1-3-13l112-120a8,8,0,0,1,13.69,7L153.18,90.9l57.63,21.61a8,8,0,0,1,3,12.95Z\"/>","cup":"<path d=\"M208,80H32a8,8,0,0,0-8,8v48a96.3,96.3,0,0,0,32.54,72H32a8,8,0,0,0,0,16H208a8,8,0,0,0,0-16H183.46a96.59,96.59,0,0,0,27-40.09A40,40,0,0,0,248,128v-8A40,40,0,0,0,208,80Zm24,48a24,24,0,0,1-17.2,23,95.78,95.78,0,0,0,1.2-15V97.38A24,24,0,0,1,232,120ZM112,56V24a8,8,0,0,1,16,0V56a8,8,0,0,1-16,0Zm32,0V24a8,8,0,0,1,16,0V56a8,8,0,0,1-16,0ZM80,56V24a8,8,0,0,1,16,0V56a8,8,0,0,1-16,0Z\"/>","bowl":"<path d=\"M81.77,55c5.35-6.66,6.67-11.16,6.12-13.14-.42-1.49-2.41-2.26-2.43-2.26A8,8,0,0,1,88,24a8.11,8.11,0,0,1,2.38.36c1,.31,9.91,3.33,12.79,12.76,2.46,8.07-.55,17.45-8.94,27.89-5.35,6.66-6.67,11.16-6.12,13.14.42,1.49,2.37,2.24,2.39,2.25A8,8,0,0,1,88,96a8.11,8.11,0,0,1-2.38-.36c-1-.31-9.91-3.33-12.79-12.76C70.37,74.81,73.38,65.43,81.77,55Zm31.06,27.89c2.88,9.43,11.79,12.45,12.79,12.76A8.11,8.11,0,0,0,128,96a8,8,0,0,0,2.5-15.6s-2-.76-2.39-2.25c-.55-2,.77-6.48,6.12-13.14,8.39-10.44,11.4-19.82,8.94-27.89-2.88-9.43-11.78-12.45-12.79-12.76A8.11,8.11,0,0,0,128,24a8,8,0,0,0-2.54,15.59s2,.77,2.43,2.26c.55,2-.77,6.48-6.12,13.14C113.38,65.43,110.37,74.81,112.83,82.88Zm40,0c2.88,9.43,11.79,12.45,12.79,12.76A8.11,8.11,0,0,0,168,96a8,8,0,0,0,2.5-15.6s-2-.76-2.39-2.25c-.55-2,.77-6.48,6.12-13.14,8.39-10.44,11.4-19.82,8.94-27.89-2.88-9.43-11.78-12.45-12.79-12.76A8.11,8.11,0,0,0,168,24a8,8,0,0,0-2.54,15.59s2,.77,2.43,2.26c.55,2-.77,6.48-6.12,13.14C153.38,65.43,150.37,74.81,152.83,82.88ZM224,112H32a8,8,0,0,0-8,8,104.35,104.35,0,0,0,56,92.28V216a16,16,0,0,0,16,16h64a16,16,0,0,0,16-16v-3.72A104.35,104.35,0,0,0,232,120,8,8,0,0,0,224,112Z\"/>","door":"<path d=\"M232,216H208V40a16,16,0,0,0-16-16H64A16,16,0,0,0,48,40V216H24a8,8,0,0,0,0,16H232a8,8,0,0,0,0-16Zm-68-72a12,12,0,1,1,12-12A12,12,0,0,1,164,144Z\"/>","snow":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm42.37,119.22,18.94-6.76a8,8,0,1,1,5.38,15.08l-15.48,5.52,4.52,16.87a8,8,0,0,1-5.66,9.8A8.23,8.23,0,0,1,176,184a8,8,0,0,1-7.73-5.93l-5.57-20.8L136,141.86v30.83l13.66,13.65a8,8,0,0,1-11.32,11.32L128,187.31l-10.34,10.35a8,8,0,0,1-11.32-11.32L120,172.69V141.86L93.3,157.27l-5.57,20.8A8,8,0,0,1,80,184a8.23,8.23,0,0,1-2.07-.27,8,8,0,0,1-5.66-9.8l4.52-16.87-15.48-5.52a8,8,0,0,1,5.38-15.08l18.94,6.76L112,128,85.63,112.78l-18.94,6.76A8.18,8.18,0,0,1,64,120a8,8,0,0,1-2.69-15.54l15.48-5.52L72.27,82.07a8,8,0,0,1,15.46-4.14l5.57,20.8L120,114.14V83.31L106.34,69.66a8,8,0,0,1,11.32-11.32L128,68.69l10.34-10.35a8,8,0,0,1,11.32,11.32L136,83.31v30.83l26.7-15.41,5.57-20.8a8,8,0,0,1,15.46,4.14l-4.52,16.87,15.48,5.52A8,8,0,0,1,192,120a8.18,8.18,0,0,1-2.69-.46l-18.94-6.76L144,128Z\"/>","sun":"<path d=\"M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm8,24a64,64,0,1,0,64,64A64.07,64.07,0,0,0,128,64ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z\"/>","repeat":"<path d=\"M224,48V96a8,8,0,0,1-8,8H168a8,8,0,0,1-5.66-13.66L180.65,72a79.48,79.48,0,0,0-54.72-22.09h-.45A79.52,79.52,0,0,0,69.59,72.71,8,8,0,0,1,58.41,61.27,96,96,0,0,1,192,60.7l18.36-18.36A8,8,0,0,1,224,48ZM186.41,183.29A80,80,0,0,1,75.35,184l18.31-18.31A8,8,0,0,0,88,152H40a8,8,0,0,0-8,8v48a8,8,0,0,0,13.66,5.66L64,195.3a95.42,95.42,0,0,0,66,26.76h.53a95.36,95.36,0,0,0,67.07-27.33,8,8,0,0,0-11.18-11.44Z\"/>","question":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,168a12,12,0,1,1,12-12A12,12,0,0,1,128,192Zm8-48.72V144a8,8,0,0,1-16,0v-8a8,8,0,0,1,8-8c13.23,0,24-9,24-20s-10.77-20-24-20-24,9-24,20v4a8,8,0,0,1-16,0v-4c0-19.85,17.94-36,40-36s40,16.15,40,36C168,125.38,154.24,139.93,136,143.28Z\"/>","bell":"<path d=\"M221.8,175.94C216.25,166.38,208,139.33,208,104a80,80,0,1,0-160,0c0,35.34-8.26,62.38-13.81,71.94A16,16,0,0,0,48,200H88.81a40,40,0,0,0,78.38,0H208a16,16,0,0,0,13.8-24.06ZM128,216a24,24,0,0,1-22.62-16h45.24A24,24,0,0,1,128,216Z\"/>","smile":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM92,96a12,12,0,1,1-12,12A12,12,0,0,1,92,96Zm82.92,60c-10.29,17.79-27.39,28-46.92,28s-36.63-10.2-46.92-28a8,8,0,1,1,13.84-8c7.47,12.91,19.21,20,33.08,20s25.61-7.1,33.08-20a8,8,0,1,1,13.84,8ZM164,120a12,12,0,1,1,12-12A12,12,0,0,1,164,120Z\"/>","heart":"<path d=\"M240,102c0,70-103.79,126.66-108.21,129a8,8,0,0,1-7.58,0C119.79,228.66,16,172,16,102A62.07,62.07,0,0,1,78,40c20.65,0,38.73,8.88,50,23.89C139.27,48.88,157.35,40,178,40A62.07,62.07,0,0,1,240,102Z\"/>","phone":"<path d=\"M231.88,175.08A56.26,56.26,0,0,1,176,224C96.6,224,32,159.4,32,80A56.26,56.26,0,0,1,80.92,24.12a16,16,0,0,1,16.62,9.52l21.12,47.15,0,.12A16,16,0,0,1,117.39,96c-.18.27-.37.52-.57.77L96,121.45c7.49,15.22,23.41,31,38.83,38.51l24.34-20.71a8.12,8.12,0,0,1,.75-.56,16,16,0,0,1,15.17-1.4l.13.06,47.11,21.11A16,16,0,0,1,231.88,175.08Z\"/>","bed":"<path d=\"M216,72H32V48a8,8,0,0,0-16,0V208a8,8,0,0,0,16,0V176H240v32a8,8,0,0,0,16,0V112A40,40,0,0,0,216,72ZM32,88h72v72H32Z\"/>","person":"<path d=\"M230.93,220a8,8,0,0,1-6.93,4H32a8,8,0,0,1-6.92-12c15.23-26.33,38.7-45.21,66.09-54.16a72,72,0,1,1,73.66,0c27.39,8.95,50.86,27.83,66.09,54.16A8,8,0,0,1,230.93,220Z\"/>","tv":"<path d=\"M216,64H147.31l34.35-34.34a8,8,0,1,0-11.32-11.32L128,60.69,85.66,18.34A8,8,0,0,0,74.34,29.66L108.69,64H40A16,16,0,0,0,24,80V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm0,136H160V80h56V200Zm-16-84a12,12,0,1,1-12-12A12,12,0,0,1,200,116Zm0,48a12,12,0,1,1-12-12A12,12,0,0,1,200,164Z\"/>","music":"<path d=\"M210.3,56.34l-80-24A8,8,0,0,0,120,40V148.26A48,48,0,1,0,136,184V98.75l69.7,20.91A8,8,0,0,0,216,112V64A8,8,0,0,0,210.3,56.34Z\"/>","play":"<path d=\"M240,128a15.74,15.74,0,0,1-7.6,13.51L88.32,229.65a16,16,0,0,1-16.2.3A15.86,15.86,0,0,1,64,216.13V39.87a15.86,15.86,0,0,1,8.12-13.82,16,16,0,0,1,16.2.3L232.4,114.49A15.74,15.74,0,0,1,240,128Z\"/>","forkknife":"<path d=\"M216,40V224a8,8,0,0,1-16,0V176H152a8,8,0,0,1-8-8,268.75,268.75,0,0,1,7.22-56.88c9.78-40.49,28.32-67.63,53.63-78.47A8,8,0,0,1,216,40Zm-96.11-1.31a8,8,0,1,0-15.78,2.63L111.89,88H88V40a8,8,0,0,0-16,0V88H48.11l7.78-46.68a8,8,0,1,0-15.78-2.63l-8,48A8.17,8.17,0,0,0,32,88a48.07,48.07,0,0,0,40,47.32V224a8,8,0,0,0,16,0V135.32A48.07,48.07,0,0,0,128,88a8.17,8.17,0,0,0-.11-1.31Z\"/>","drop":"<path d=\"M174,47.75a254.19,254.19,0,0,0-41.45-38.3,8,8,0,0,0-9.18,0A254.19,254.19,0,0,0,82,47.75C54.51,79.32,40,112.6,40,144a88,88,0,0,0,176,0C216,112.6,201.49,79.32,174,47.75Zm9.85,105.59a57.6,57.6,0,0,1-46.56,46.55A8.75,8.75,0,0,1,136,200a8,8,0,0,1-1.32-15.89c16.57-2.79,30.63-16.85,33.44-33.45a8,8,0,0,1,15.78,2.68Z\"/>","hot":"<path d=\"M152,146.08V40a32,32,0,0,0-64,0V146.08a56,56,0,1,0,64,0ZM136,56H104V40a16,16,0,0,1,32,0Zm41.3,24.77a8,8,0,0,1,2.33-11.07c15-9.79,26.87-4.75,35.51-1.06C223,72,227.76,74,235.63,68.89a8,8,0,0,1,8.74,13.41C237.88,86.53,232,88,226.69,88c-7,0-12.92-2.54-17.83-4.63C201,80,196.24,78,188.37,83.11A8,8,0,0,1,177.3,80.77Zm69.4,22.46a8,8,0,0,1-2.33,11.07C237.88,118.53,232,120,226.69,120c-7,0-12.92-2.54-17.83-4.63-7.87-3.36-12.62-5.38-20.49-.25a8,8,0,0,1-8.74-13.41c15-9.79,26.87-4.75,35.51-1.06,7.87,3.36,12.62,5.39,20.49.25A8,8,0,0,1,246.7,103.23Z\"/>","toilet":"<path d=\"M60,88H196a4,4,0,0,0,4-4V40a16,16,0,0,0-16-16H72A16,16,0,0,0,56,40V84A4,4,0,0,0,60,88ZM88,48h15.73A8.18,8.18,0,0,1,112,55.47,8,8,0,0,1,104,64H88.27A8.18,8.18,0,0,1,80,56.53,8,8,0,0,1,88,48Zm136,64.06a8,8,0,0,0-8-8.06H40a8,8,0,0,0-8,8.06,96.1,96.1,0,0,0,51.68,85.08l-3.47,24.27a16.43,16.43,0,0,0,1.63,10A16,16,0,0,0,96,240h63.66a16.52,16.52,0,0,0,9.72-3,16,16,0,0,0,6.46-15.23l-3.52-24.6A96.1,96.1,0,0,0,224,112.06ZM96,224l2.93-20.5a96.15,96.15,0,0,0,58.14,0L160,224Z\"/>","warning":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm-8,56a8,8,0,0,1,16,0v56a8,8,0,0,1-16,0Zm8,104a12,12,0,1,1,12-12A12,12,0,0,1,128,184Z\"/>","point":"<path d=\"M224,104v50.93c0,46.2-36.85,84.55-83,85.06A83.71,83.71,0,0,1,80.6,215.4C58.79,192.33,34.15,136,34.15,136a16,16,0,0,1,6.53-22.23c7.66-4,17.1-.84,21.4,6.62l21,36.44a6.09,6.09,0,0,0,6,3.09l.12,0A8.19,8.19,0,0,0,96,151.74V32a16,16,0,0,1,16.77-16c8.61.4,15.23,7.82,15.23,16.43V104a8,8,0,0,0,8.53,8,8.17,8.17,0,0,0,7.47-8.25V88a16,16,0,0,1,16.77-16c8.61.4,15.23,7.82,15.23,16.43V112a8,8,0,0,0,8.53,8,8.17,8.17,0,0,0,7.47-8.25v-7.28c0-8.61,6.62-16,15.23-16.43A16,16,0,0,1,224,104Z\"/>","palm":"<path d=\"M216,104v48a88,88,0,0,1-176,0V64a16,16,0,0,1,32,0v56a8,8,0,0,0,16,0V32a16,16,0,0,1,32,0v80a8,8,0,0,0,16,0V48a16,16,0,0,1,32,0v80.67A48.08,48.08,0,0,0,128,176a8,8,0,0,0,16,0,32,32,0,0,1,32-32,8,8,0,0,0,8-8V104a16,16,0,0,1,32,0Z\"/>","handheart":"<path d=\"M230.33,141.06a24.34,24.34,0,0,0-18.61-4.77C230.5,117.33,240,98.48,240,80c0-26.47-21.29-48-47.46-48A47.58,47.58,0,0,0,156,48.75,47.58,47.58,0,0,0,119.46,32C93.29,32,72,53.53,72,80c0,11,3.24,21.69,10.06,33a31.87,31.87,0,0,0-14.75,8.4L44.69,144H16A16,16,0,0,0,0,160v40a16,16,0,0,0,16,16H120a7.93,7.93,0,0,0,1.94-.24l64-16a6.94,6.94,0,0,0,1.19-.4L226,182.82l.44-.2a24.6,24.6,0,0,0,3.93-41.56Zm-10.9,27.15-38,16.18L119,200H56V155.31l22.63-22.62A15.86,15.86,0,0,1,89.94,128H140a12,12,0,0,1,0,24H112a8,8,0,0,0,0,16h32a8.32,8.32,0,0,0,1.79-.2l67-15.41.31-.08a8.6,8.6,0,0,1,6.3,15.9Z\"/>","info":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm-4,48a12,12,0,1,1-12,12A12,12,0,0,1,124,72Zm12,112a16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40a8,8,0,0,1,0,16Z\"/>","pray":"<path d=\"M235.32,180l-36.24-36.25L162.62,23.46A21.76,21.76,0,0,0,128,12.93,21.76,21.76,0,0,0,93.38,23.46L56.92,143.76,20.68,180a16,16,0,0,0,0,22.62l32.69,32.69a16,16,0,0,0,22.63,0L124.28,187a40.68,40.68,0,0,0,3.72-4.29,40.68,40.68,0,0,0,3.72,4.29L180,235.32a16,16,0,0,0,22.63,0l32.69-32.69A16,16,0,0,0,235.32,180ZM120,158.75a23.85,23.85,0,0,1-7,17L88.68,200,56,167.32l13.65-13.66a8,8,0,0,0,2-3.34l37-122.22A5.78,5.78,0,0,1,120,29.78Zm47.44,41.38L143,175.72a23.85,23.85,0,0,1-7-17v-129a5.78,5.78,0,0,1,11.31-1.68l37,122.22a8,8,0,0,0,2,3.34l14.49,14.49Z\"/>","wink":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM92,96a12,12,0,1,1-12,12A12,12,0,0,1,92,96Zm82.92,60c-10.29,17.79-27.39,28-46.92,28s-36.63-10.2-46.92-28a8,8,0,1,1,13.84-8c7.47,12.91,19.21,20,33.08,20s25.61-7.1,33.08-20a8,8,0,1,1,13.84,8ZM184,116H152a8,8,0,0,1,0-16h32a8,8,0,0,1,0,16Z\"/>","sad":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM92,96a12,12,0,1,1-12,12A12,12,0,0,1,92,96Zm80,86.92A8,8,0,0,1,161.08,180c-7.47-12.91-19.21-20-33.08-20s-25.61,7.1-33.08,20a8,8,0,1,1-13.84-8c10.29-17.79,27.39-28,46.92-28s36.63,10.2,46.92,28A8,8,0,0,1,172,182.92ZM164,120a12,12,0,1,1,12-12A12,12,0,0,1,164,120Z\"/>","angry":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24ZM80,140a12,12,0,1,1,12,12A12,12,0,0,1,80,140Zm78.66,48.43a8,8,0,0,1-11.09,2.23C141.07,186.34,136,184,128,184s-13.07,2.34-19.57,6.66a8,8,0,0,1-8.86-13.32C108,171.73,116.06,168,128,168s20,3.73,28.43,9.34A8,8,0,0,1,158.66,188.43ZM164,152a12,12,0,1,1,12-12A12,12,0,0,1,164,152Zm16.44-57.34-48,32a8,8,0,0,1-8.88,0l-48-32a8,8,0,1,1,8.88-13.32L128,110.39l43.56-29a8,8,0,0,1,8.88,13.32Z\"/>","nervous":"<path d=\"M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm36,72a12,12,0,1,1-12,12A12,12,0,0,1,164,96ZM92,96a12,12,0,1,1-12,12A12,12,0,0,1,92,96Zm84,80c-10,0-15.05-6.74-18.4-11.2-3-4-3.92-4.8-5.6-4.8s-2.57.76-5.6,4.8C143.05,169.26,138,176,128,176s-15-6.74-18.4-11.2c-3-4-3.92-4.8-5.6-4.8s-2.57.76-5.6,4.8C95.05,169.26,90,176,80,176a8,8,0,0,1,0-16c1.68,0,2.57-.76,5.6-4.8C89,150.74,94,144,104,144s15,6.74,18.4,11.2c3,4,3.92,4.8,5.6,4.8s2.57-.76,5.6-4.8C137,150.74,142,144,152,144s15.05,6.74,18.4,11.2c3,4,3.92,4.8,5.6,4.8a8,8,0,0,1,0,16Z\"/>","walk":"<path d=\"M120,48a32,32,0,1,1,32,32A32,32,0,0,1,120,48Zm88,88c-28.64,0-41.81-13.3-55.75-27.37-3.53-3.57-7.18-7.26-11-10.58-37-32.14-96.22,22.73-98.72,25.08a8,8,0,0,0,10.95,11.66A163.88,163.88,0,0,1,84,113c13.78-7.38,25.39-10.23,34.7-8.58L64.66,228.81a8,8,0,0,0,4.15,10.52A7.84,7.84,0,0,0,72,240a8,8,0,0,0,7.34-4.81l33.59-77.27L144,180.12V232a8,8,0,0,0,16,0V176a8,8,0,0,0-3.35-6.51l-37.2-26.57L132.88,112c2.64,2.44,5.26,5.07,8,7.84C155.05,134.19,172.69,152,208,152a8,8,0,0,0,0-16Z\"/>","users":"<path d=\"M164.47,195.63a8,8,0,0,1-6.7,12.37H10.23a8,8,0,0,1-6.7-12.37,95.83,95.83,0,0,1,47.22-37.71,60,60,0,1,1,66.5,0A95.83,95.83,0,0,1,164.47,195.63Zm87.91-.15a95.87,95.87,0,0,0-47.13-37.56A60,60,0,0,0,144.7,54.59a4,4,0,0,0-1.33,6A75.83,75.83,0,0,1,147,150.53a4,4,0,0,0,1.07,5.53,112.32,112.32,0,0,1,29.85,30.83,23.92,23.92,0,0,1,3.65,16.47,4,4,0,0,0,3.95,4.64h60.3a8,8,0,0,0,7.73-5.93A8.22,8.22,0,0,0,252.38,195.48Z\"/>","mobile":"<path d=\"M176,16H80A24,24,0,0,0,56,40V216a24,24,0,0,0,24,24h96a24,24,0,0,0,24-24V40A24,24,0,0,0,176,16ZM80,32h96a8,8,0,0,1,8,8v8H72V40A8,8,0,0,1,80,32Zm96,192H80a8,8,0,0,1-8-8v-8H184v8A8,8,0,0,1,176,224Z\"/>","house":"<path d=\"M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z\"/>","pin":"<path d=\"M128,16a88.1,88.1,0,0,0-88,88c0,75.3,80,132.17,83.41,134.55a8,8,0,0,0,9.18,0C136,236.17,216,179.3,216,104A88.1,88.1,0,0,0,128,16Zm0,56a32,32,0,1,1-32,32A32,32,0,0,1,128,72Z\"/>","tree":"<path d=\"M128,187.85a72.44,72.44,0,0,0,8,4.62V232a8,8,0,0,1-16,0V192.47A72.44,72.44,0,0,0,128,187.85ZM198.1,62.59a76,76,0,0,0-140.2,0A71.71,71.71,0,0,0,16,127.8C15.9,166,48,199,86.14,200A72.22,72.22,0,0,0,120,192.47V156.94L76.42,135.16a8,8,0,1,1,7.16-14.32L120,139.06V88a8,8,0,0,1,16,0v27.06l36.42-18.22a8,8,0,1,1,7.16,14.32L136,132.94v59.53A72.17,72.17,0,0,0,168,200l1.82,0C208,199,240.11,166,240,127.8A71.71,71.71,0,0,0,198.1,62.59Z\"/>","trash":"<path d=\"M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM112,168a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm0-120H96V40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8Z\"/>","eye":"<path d=\"M247.31,124.76c-.35-.79-8.82-19.58-27.65-38.41C194.57,61.26,162.88,48,128,48S61.43,61.26,36.34,86.35C17.51,105.18,9,124,8.69,124.76a8,8,0,0,0,0,6.5c.35.79,8.82,19.57,27.65,38.4C61.43,194.74,93.12,208,128,208s66.57-13.26,91.66-38.34c18.83-18.83,27.3-37.61,27.65-38.4A8,8,0,0,0,247.31,124.76ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z\"/>","eyeoff":"<path d=\"M96.68,57.87a4,4,0,0,1,2.08-6.76A130.13,130.13,0,0,1,128,48c34.88,0,66.57,13.26,91.66,38.35,18.83,18.83,27.3,37.62,27.65,38.41a8,8,0,0,1,0,6.5c-.35.79-8.82,19.57-27.65,38.4q-4.28,4.26-8.79,8.07a4,4,0,0,1-5.53-.36ZM213.92,210.62a8,8,0,1,1-11.84,10.76L180,197.13A127.21,127.21,0,0,1,128,208c-34.88,0-66.57-13.26-91.66-38.34C17.51,150.83,9,132.05,8.69,131.26a8,8,0,0,1,0-6.5C9,124,17.51,105.18,36.34,86.35a135,135,0,0,1,25-19.78L42.08,45.38A8,8,0,1,1,53.92,34.62Zm-65.27-42-51.66-56.82a40,40,0,0,0,51.66,56.82Z\"/>"};
+const ICON_NAMES = {"": "Kein Symbol", "moon": "Mond (Ruhe)", "palm": "Hand (Stopp)", "pain": "Blitz (Schmerz)", "warning": "Ausrufezeichen", "drop": "Tropfen (Durst)", "forkknife": "Besteck (Hunger)", "toilet": "Toilette", "bed": "Bett", "snow": "Kälte", "hot": "Thermometer (warm)", "point": "Zeigende Hand", "bell": "Glocke (Hilfe)", "repeat": "Wiederholen", "question": "Frage", "info": "Info", "pray": "Gefaltete Hände", "handheart": "Hand mit Herz", "heart": "Herz", "smile": "Lächeln", "wink": "Zwinkern", "sad": "Traurig", "angry": "Ärgerlich", "nervous": "Ängstlich", "person": "Person", "users": "Menschen", "phone": "Telefon", "mobile": "Handy", "walk": "Gehen", "house": "Wohnung", "pin": "Ort", "tree": "Draußen", "sun": "Sonne", "cup": "Tasse", "bowl": "Schüssel", "door": "Tür", "tv": "Fernsehen", "music": "Musik"};
+const svg = name => ICONS[name] ? `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">${ICONS[name]}</svg>` : '';
+
+/* Phrase groups: each group starts on its own page. */
+const GROUPS = [
+  { id: 'beduerfnisse', name: 'Das brauche ich' },
+  { id: 'gespraech', name: 'Gespräch & Gefühle' },
+  { id: 'menschen', name: 'Menschen & Orte' },
+  { id: 'eigene', name: 'Eigene Sätze' },
+];
+const DEFAULT_PHRASES = [
+  { id: 'ruhe', text: "Ich brauche Ruhe", icon: 'moon', group: 'beduerfnisse' },
+  { id: 'allein', text: "Lass mich bitte allein", icon: 'palm', group: 'beduerfnisse' },
+  { id: 'schmerz', text: "Ich habe Schmerzen", icon: 'pain', group: 'beduerfnisse' },
+  { id: 'unangenehm', text: "Etwas ist unangenehm", icon: 'warning', group: 'beduerfnisse' },
+  { id: 'durst', text: "Ich habe Durst", icon: 'drop', group: 'beduerfnisse' },
+  { id: 'hunger', text: "Ich habe Hunger", icon: 'forkknife', group: 'beduerfnisse' },
+  { id: 'toilette', text: "Ich muss auf die Toilette", icon: 'toilet', group: 'beduerfnisse' },
+  { id: 'muede', text: "Ich bin müde", icon: 'bed', group: 'beduerfnisse' },
+  { id: 'kalt', text: "Mir ist kalt", icon: 'snow', group: 'beduerfnisse' },
+  { id: 'warm', text: "Mir ist zu warm", icon: 'hot', group: 'beduerfnisse' },
+  { id: 'etwas', text: "Ich brauche etwas", icon: 'point', group: 'beduerfnisse' },
+  { id: 'hilfe', text: "Bitte hol Hilfe", icon: 'bell', group: 'beduerfnisse' },
+  { id: 'nochmal', text: "Bitte noch einmal sagen", icon: 'repeat', group: 'gespraech' },
+  { id: 'weiss', text: "Ich weiß es nicht", icon: 'question', group: 'gespraech' },
+  { id: 'info', text: "Ich möchte mehr darüber wissen", icon: 'info', group: 'gespraech' },
+  { id: 'danke', text: "Danke", icon: 'pray', group: 'gespraech' },
+  { id: 'bleib', text: "Bleib bei mir", icon: 'handheart', group: 'gespraech' },
+  { id: 'liebe', text: "Ich hab dich lieb", icon: 'heart', group: 'gespraech' },
+  { id: 'gluecklich', text: "Ich bin glücklich", icon: 'smile', group: 'gespraech' },
+  { id: 'zufrieden', text: "Ich bin zufrieden", icon: 'wink', group: 'gespraech' },
+  { id: 'frustriert', text: "Ich bin frustriert", icon: 'sad', group: 'gespraech' },
+  { id: 'aerger', text: "Ich bin ärgerlich", icon: 'angry', group: 'gespraech' },
+  { id: 'angst', text: "Ich habe Angst", icon: 'nervous', group: 'gespraech' },
+  { id: 'mama', text: "Mama", icon: 'person', group: 'menschen' },
+  { id: 'freundin', text: "Meine Freundin", icon: 'person', group: 'menschen' },
+  { id: 'freund', text: "Mein Freund", icon: 'person', group: 'menschen' },
+  { id: 'anrufen', text: "Bitte anrufen", icon: 'phone', group: 'menschen' },
+  { id: 'kommen', text: "Soll bitte kommen", icon: 'walk', group: 'menschen' },
+  { id: 'besuchen', text: "Jemanden besuchen", icon: 'users', group: 'menschen' },
+  { id: 'handy', text: "Mein Handy", icon: 'mobile', group: 'menschen' },
+  { id: 'wohnung', text: "Meine Wohnung", icon: 'house', group: 'menschen' },
+  { id: 'hoven', text: "Das Hoven", icon: 'pin', group: 'menschen' },
+  { id: 'freiheit', text: "Große Freiheit", icon: 'pin', group: 'menschen' },
+  { id: 'draussen', text: "Ich möchte nach draußen", icon: 'tree', group: 'menschen' },
+];
+const DEFAULT_GROUP = Object.fromEntries(DEFAULT_PHRASES.map(p => [p.id, p.group]));
+const groupOf = p => GROUPS.some(g => g.id === p.group) ? p.group : (DEFAULT_GROUP[p.id] || 'eigene');
+
+/* ---------- State ---------- */
+/* media / messages: what the reader sees (null until loaded); allMedia / allMessages also hold hidden ("off") items. */
+const state = { phrases: DEFAULT_PHRASES, media: null, messages: null, allMedia: null, allMessages: null, canEdit: false, mode: 'loading' };
+const allOf = col => (col === 'media' ? state.allMedia : state.allMessages) || [];
+const MAX_UPLOAD = 20 * 1024 * 1024;   // per file, set by the asset store
+
+/* Google Drive: driveSrc reads the folder, driveSink keeps what it brings. Both are set at start-up:
+   in claude.ai the Drive connector + the shared db; in the web version Google directly + this device. */
+const DRIVE = { server: 'Google Drive', folderId: '', folderName: 'Nah bei dir' };
+const VIDEO_LIMIT = Math.floor(19.5 * 1024 * 1024); // claude.ai: larger videos are shrunk on the Mac (same threshold there)
+const driveIdx = { media: null, messages: null };   // driveId -> { docId, ... }, filled by the store
+let driveStatus = { text: '', err: false };
+let syncing = false, lastSync = 0;
+let driveSrc = null, driveSink = null;
+let webDrive = null;                                 // set by the web build (Google Drive without Claude)
+const driveReady = () => !!(driveSrc && driveSink);
+
+/* ---------- Capabilities ---------- */
+const use = name => (window.claude && typeof window.claude.use === 'function')
+  ? Promise.resolve(window.claude.use(name)).catch(() => null) : Promise.resolve(null);
+let tts = null;
+use('tts').then(t => { tts = t; });
+
+/* ---------- Speech: one fixed German voice of this device ----------
+   The chosen voice is remembered per device (voices differ between devices). */
+const hasSynth = 'speechSynthesis' in window;
+const NOVELTY = /\b(eddy|flo|grandma|grandpa|oma|opa|reed|rocko|sandy|shelley|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox)\b/i;
+let germanVoices = [], voice = null;
+const prefs = { voice: '', rate: 0.85 };
+try { prefs.voice = localStorage.getItem('nbd-voice') || ''; const r = parseFloat(localStorage.getItem('nbd-rate')); if (r >= 0.5 && r <= 1.2) prefs.rate = r; } catch {}
+function voiceScore(v) {
+  let s = 0;
+  if (/^de[-_]DE/i.test(v.lang)) s += 20; else if (/^de/i.test(v.lang)) s += 10;
+  if (/premium/i.test(v.name)) s += 40;
+  if (/enhanced|erweitert|verbessert/i.test(v.name)) s += 30;
+  if (/natural|neural|online/i.test(v.name)) s += 25;
+  if (/google/i.test(v.name)) s += 15;
+  if (/anna|petra|helena|katja|conrad|markus|yannick|amala|seraphina/i.test(v.name)) s += 5;
+  if (NOVELTY.test(v.name)) s -= 100;
+  return s;
+}
+function loadVoices() {
+  if (!hasSynth) return;
+  try {
+    germanVoices = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a));
+    voice = germanVoices.find(v => v.voiceURI === prefs.voice) || germanVoices.find(v => !NOVELTY.test(v.name)) || germanVoices[0] || null;
+    renderVoices();
+  } catch {}
+}
+if (hasSynth) { loadVoices(); try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch { try { speechSynthesis.onvoiceschanged = loadVoices; } catch {} } }
+function browserSpeak(text) {
+  if (!hasSynth) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = voice ? voice.lang : 'de-DE'; u.rate = prefs.rate;
+    if (voice) u.voice = voice;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+function speak(text) {
+  // Always the device voice when it has a German one: same voice every time.
+  if (hasSynth && (voice || !tts)) { browserSpeak(text); return; }
+  if (tts) {
+    tts.speak(text, { language: 'de', rate: prefs.rate }).catch(e => {
+      const c = e && e.code;
+      if (c === 'not_granted') { tts = null; return; }       // viewer turned it off: respect that
+      if (c === 'stopped' || c === 'busy') return;
+      browserSpeak(text);
+    });
+  }
+}
+function stopSpeaking() {
+  try { tts && tts.stop(); } catch {}
+  try { hasSynth && speechSynthesis.cancel(); } catch {}
+}
+
+/* ---------- Tabs ---------- */
+const VIEWS = ['sprechen', 'bilder', 'nachrichten'];
+let currentTab = 'sprechen';
+let openOverlay = null;   // an in-page panel (Gesagt, Bild, Nachricht, Angehörige) shown instead of the tab
+function leavePanel() {
+  if (!openOverlay) return;
+  if (openOverlay.id === 'viewer') $('#stage').innerHTML = '';
+  openOverlay = null; stopSpeaking();
+  document.body.classList.remove('care-open');
+}
+function showTab(name) {
+  if (!VIEWS.includes(name)) name = 'sprechen';
+  leavePanel();
+  currentTab = name;
+  document.querySelectorAll('.app > .view').forEach(v => { v.hidden = v.id !== 'view-' + name; });
+  VIEWS.forEach(v => $('#tab-' + v).setAttribute('aria-selected', String(v === name)));
+  try { localStorage.setItem('nbd-tab', name); } catch {}
+  if (name === 'sprechen') requestAnimationFrame(restorePhrasePage);
+  else syncDrive(false);   // Bilder / Nachrichten: look for new files in the Drive folder
+}
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+try { showTab(localStorage.getItem('nbd-tab') || 'sprechen'); } catch { showTab('sprechen'); }
+
+/* ---------- In-page panels ---------- */
+function open(el) {
+  if (openOverlay && openOverlay.id === 'viewer' && el.id !== 'viewer') $('#stage').innerHTML = '';
+  document.querySelectorAll('.app > .view').forEach(v => { v.hidden = v !== el; });
+  openOverlay = el;
+  try { window.scrollTo(0, 0); } catch {}
+}
+function close() { if (openOverlay) showTab(currentTab); }
+document.addEventListener('keydown', e => {
+  if (!openOverlay) return;
+  if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+  if (openOverlay.id === 'viewer') { if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1); }
+});
+
+/* ---------- Speak view ---------- */
+let lastSaid = '';
+function say(text, icon, tone) {
+  lastSaid = text;
+  const said = $('#said');
+  said.className = 'said' + (tone ? ' ' + tone : '');
+  const ic = tone === 'yes' ? uiSvg('ja') : tone === 'no' ? uiSvg('nein') : svg(icon);
+  said.innerHTML = ic + `<span>${esc(text)}</span>`;
+  open($('#say'));
+  speak(text);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-say]');
+  if (b) say(b.dataset.say, b.dataset.icon, b.dataset.tone);
+});
+$('#say-again').addEventListener('click', () => speak(lastSaid));
+$('#say-close').addEventListener('click', close);
+
+/* Phrase pages: 3 rows × (4 | 3 | 2) columns depending on the width; swipe or tap the arrows. */
+let phrasePage = 0, phrasePages = 1, phraseCols = 0, phraseTitles = [], phraseParts = [];
+const reduceMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+function colsFor() {
+  const w = $('#phrases').clientWidth || $('.app').clientWidth || window.innerWidth;
+  return w > 860 ? 4 : w > 560 ? 3 : 2;
+}
+function renderPhrases() {
+  const box = $('#phrases');
+  phraseCols = colsFor();
+  const per = phraseCols * 3, pages = [];
+  for (const g of GROUPS) {
+    const items = state.phrases.filter(p => groupOf(p) === g.id);
+    const n = Math.ceil(items.length / per);
+    for (let i = 0; i < items.length; i += per) pages.push({ title: g.name, part: n > 1 ? `${i / per + 1}/${n}` : '', items: items.slice(i, i + per) });
+  }
+  if (!pages.length) pages.push({ title: '', items: [] });
+  phrasePages = pages.length;
+  phraseTitles = pages.map(p => p.title);
+  phraseParts = pages.map(p => p.part || '');
+  phrasePage = Math.min(phrasePage, phrasePages - 1);
+  box.style.setProperty('--cols', phraseCols);
+  box.innerHTML = pages.map((pg, i) => `<div class="ppage" role="group" aria-label="${esc(pg.title)}, Seite ${i + 1} von ${pages.length}">` + pg.items.map(p =>
+    `<button class="phrase" data-say="${esc(p.text)}" data-icon="${esc(p.icon || '')}">${svg(p.icon)}<span>${esc(p.text)}</span></button>`
+  ).join('') + '</div>').join('');
+  $('#pager').hidden = phrasePages < 2;
+  goPage(phrasePage, false);
+}
+function goPage(i, smooth = true) {
+  const box = $('#phrases');
+  phrasePage = Math.max(0, Math.min(phrasePages - 1, i));
+  const target = box.children[phrasePage];
+  if (target && box.firstElementChild) box.scrollTo({ left: target.offsetLeft - box.firstElementChild.offsetLeft, behavior: smooth && !reduceMotion() ? 'smooth' : 'auto' });
+  updatePager();
+}
+function updatePager() {
+  $('#page-title').textContent = phraseTitles[phrasePage] || '';
+  $('#page-count').textContent = phraseParts[phrasePage] || '';
+  $('#page-prev').disabled = phrasePage === 0;
+  $('#page-next').disabled = phrasePage >= phrasePages - 1;
+}
+function restorePhrasePage() { goPage(phrasePage, false); }
+$('#phrases').addEventListener('scroll', () => {
+  const box = $('#phrases'), pageWidth = box.clientWidth + 16;   // page + gap
+  if (!box.clientWidth) return;
+  const i = Math.round(box.scrollLeft / pageWidth);
+  if (i !== phrasePage) { phrasePage = Math.max(0, Math.min(phrasePages - 1, i)); updatePager(); }
+}, { passive: true });
+$('#page-prev').addEventListener('click', () => goPage(phrasePage - 1));
+$('#page-next').addEventListener('click', () => goPage(phrasePage + 1));
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (colsFor() !== phraseCols) renderPhrases(); else restorePhrasePage();
+  }, 200);
+});
+
+/* ---------- Media view ---------- */
+let viewIndex = 0;
+function renderMedia() {
+  const box = $('#media');
+  if (state.media === null) return;
+  if (!state.media.length) {
+    box.innerHTML = '<p class="empty">Hier erscheinen bald Fotos und Videos von Familie und Freunden.</p>';
+    return;
+  }
+  box.innerHTML = '<div class="grid">' + state.media.map((m, i) =>
+    `<button class="tile" data-media="${i}" aria-label="${m.kind === 'video' ? 'Video' : 'Foto'} ${i + 1} öffnen">` +
+    (m.kind === 'video'
+      ? `<video src="${esc(m.src)}#t=0.5" preload="metadata" muted playsinline></video><span class="play">${svg('play')}</span>`
+      : `<img src="${esc(m.src)}" alt="" loading="lazy">`) +
+    `</button>`).join('') + '</div>';
+}
+$('#media').addEventListener('click', e => {
+  const t = e.target.closest('[data-media]');
+  if (t) { viewIndex = +t.dataset.media; showItem(); open($('#viewer')); }
+});
+function showItem() {
+  const list = state.media || [];
+  if (!list.length) { close(); return; }
+  viewIndex = (viewIndex + list.length) % list.length;
+  const m = list[viewIndex];
+  $('#stage').innerHTML = m.kind === 'video'
+    ? `<video src="${esc(m.src)}" controls playsinline autoplay preload="auto"></video>`
+    : `<img src="${esc(m.src)}" alt="Foto ${viewIndex + 1}">`;
+  // Start videos right away. This runs inside the tap, so the browser allows sound;
+  // if it still refuses, play muted (the viewer can turn the sound on in the controls).
+  const v = $('#stage video');
+  if (v) {
+    stopSpeaking();
+    const p = v.play();
+    if (p && p.catch) p.catch(() => { v.muted = true; v.play().catch(() => {}); });
+  }
+  $('#viewer-pos').textContent = `${viewIndex + 1} von ${list.length}`;
+  const single = list.length < 2;
+  $('#prev').disabled = single; $('#next').disabled = single;
+}
+function step(d) {
+  viewIndex += d; showItem();
+  const m = $('#stage img, #stage video');      // slide the new picture in from the side it came from
+  if (!m || reduceMotion()) return;
+  m.style.transition = 'none'; m.style.transform = `translateX(${d * 80}px)`; m.style.opacity = '0';
+  void m.offsetWidth;
+  m.style.transition = 'transform .28s cubic-bezier(.2,.7,.2,1), opacity .28s ease'; m.style.transform = ''; m.style.opacity = '';
+}
+$('#prev').addEventListener('click', () => step(-1));
+$('#next').addEventListener('click', () => step(1));
+(() => { // swipe: the picture follows the finger, then slides on or springs back
+  const s = $('#stage');
+  let x0 = null, y0 = null, dx = 0, horizontal = null;
+  const media = () => s.querySelector('img, video');
+  const reset = m => { if (!m) return; m.style.transition = 'transform .22s ease, opacity .22s ease'; m.style.transform = ''; m.style.opacity = ''; };
+  s.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    // leave the bottom strip of a video to its own controls (play, timeline)
+    if (e.target.tagName === 'VIDEO' && e.clientY > e.target.getBoundingClientRect().bottom - 64) return;
+    x0 = e.clientX; y0 = e.clientY; dx = 0; horizontal = null;
+  });
+  s.addEventListener('pointermove', e => {
+    if (x0 === null) return;
+    dx = e.clientX - x0;
+    if (horizontal === null && (Math.abs(dx) > 8 || Math.abs(e.clientY - y0) > 8)) horizontal = Math.abs(dx) > Math.abs(e.clientY - y0);
+    if (!horizontal) return;
+    const m = media();
+    if (m) { m.style.transition = 'none'; m.style.transform = `translateX(${dx}px)`; m.style.opacity = String(1 - Math.min(Math.abs(dx) / 700, .45)); }
+  });
+  const end = () => {
+    if (x0 === null) return;
+    x0 = null;
+    if (horizontal && Math.abs(dx) > 70 && (state.media || []).length > 1) step(dx < 0 ? 1 : -1);
+    else reset(media());
+  };
+  s.addEventListener('pointerup', end);
+  s.addEventListener('pointercancel', end);
+  s.addEventListener('dragstart', e => e.preventDefault());
+})();
+
+/* ---------- Messages view ---------- */
+const fmtDate = ts => { try { return new Date(ts).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }); } catch { return ''; } };
+/* A simple vertical list, newest first. */
+function renderMessages() {
+  const box = $('#messages');
+  if (state.messages === null) return;
+  if (!state.messages.length) {
+    box.innerHTML = '<p class="empty">Hier erscheinen Nachrichten von Familie und Freunden.</p>';
+    return;
+  }
+  box.innerHTML = '<div class="mlist">' + state.messages.map((m, i) =>
+    `<button class="msg${m.readAt ? ' read' : ''}" data-msg="${i}">` +
+    `<span class="meta"><span class="from">${esc(m.from || 'Nachricht')}</span><span class="when">${esc(fmtDate(m.createdAt))}</span></span>` +
+    `<span class="text">${esc(m.text)}</span>${uiSvg('gelesen', ' class="check"')}</button>`
+  ).join('') + '</div>';
+}
+let reading = null;
+$('#messages').addEventListener('click', e => {
+  const t = e.target.closest('[data-msg]');
+  if (!t) return;
+  reading = state.messages[+t.dataset.msg];
+  $('#r-from').textContent = reading.from || 'Nachricht';
+  $('#r-when').textContent = fmtDate(reading.createdAt);
+  $('#r-text').textContent = reading.text;
+  $('#reader .page').scrollTop = 0;
+  open($('#reader'));
+  if (!reading.readAt && store && store.markRead) store.markRead(reading.id).catch(() => {});
+});
+$('#read-aloud').addEventListener('click', () => {
+  if (!reading) return;
+  speak((reading.from ? 'Von ' + reading.from + '. ' : '') + reading.text.slice(0, 1900));
+});
+$('#reader-close').addEventListener('click', close);
+
+/* ---------- Caregiver access: press and hold ---------- */
+(() => {
+  const b = $('#care-open');
+  let t = null;   // opens after 1.5 s; the fill shows the progress
+  const start = e => {
+    if (e.button > 0) return;
+    e.preventDefault();
+    try { b.setPointerCapture(e.pointerId); } catch {}
+    clearTimeout(t);
+    b.classList.add('pressing');
+    t = setTimeout(() => { cancel(); openCare(); }, 1500);
+  };
+  const cancel = () => { clearTimeout(t); t = null; b.classList.remove('pressing'); };
+  b.addEventListener('pointerdown', start);
+  b.addEventListener('pointerup', cancel);
+  b.addEventListener('pointercancel', cancel);
+  b.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') cancel(); });
+  // iOS: keep a long press from turning into text selection or the callout menu
+  b.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+  b.addEventListener('contextmenu', e => e.preventDefault());
+  b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCare(); } });
+})();
+function openCare() { renderCare(); open($('#care')); document.body.classList.add('care-open'); }
+$('#care-close').addEventListener('click', close);
+
+/* ---------- Hell / dunkel (per device) ---------- */
+try { if (localStorage.getItem('nbd-theme') === 'light') document.body.classList.add('light'); } catch {}
+$('#theme-toggle').addEventListener('click', () => {
+  const light = document.body.classList.toggle('light');
+  try { localStorage.setItem('nbd-theme', light ? 'light' : 'dark'); } catch {}
+});
+
+/* ---------- Angehörige: forms ---------- */
+function setStatus(id, text, err) { const el = $(id); el.textContent = text; el.classList.toggle('err', !!err); }
+
+/* Symbol picker: shows the icons themselves (a native dropdown can only show text). */
+const NO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></svg>';
+function updateIconPick() {
+  const k = $('#p-icon').value || '';
+  $('#p-icon-cur').innerHTML = svg(k) || NO_ICON;
+  $('#p-icon-label').textContent = ICON_NAMES[k] || ICON_NAMES[''];
+  document.querySelectorAll('#p-icon-menu [data-icon-key]').forEach(o => o.setAttribute('aria-selected', String(o.dataset.iconKey === k)));
+}
+$('#p-icon-menu').innerHTML = Object.entries(ICON_NAMES).map(([k, v]) =>
+  `<button type="button" role="option" data-icon-key="${k}">${svg(k) || NO_ICON}<span>${esc(v)}</span></button>`).join('');
+function toggleIconMenu(force) {
+  const menu = $('#p-icon-menu'), btn = $('#p-icon-btn');
+  const show = force === undefined ? menu.hidden : force;
+  menu.hidden = !show; btn.setAttribute('aria-expanded', String(show));
+  if (show) (menu.querySelector('[aria-selected="true"]') || menu.firstElementChild).focus({ preventScroll: true });
+}
+$('#p-icon-btn').addEventListener('click', () => toggleIconMenu());
+$('#p-icon-menu').addEventListener('click', e => {
+  const o = e.target.closest('[data-icon-key]');
+  if (!o) return;
+  $('#p-icon').value = o.dataset.iconKey; updateIconPick(); toggleIconMenu(false); $('#p-icon-btn').focus();
+});
+$('#p-icon-menu').addEventListener('keydown', e => {
+  const opts = [...document.querySelectorAll('#p-icon-menu [data-icon-key]')], i = opts.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleIconMenu(false); $('#p-icon-btn').focus(); }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); opts[Math.min(opts.length - 1, i + 1)].focus(); }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); opts[Math.max(0, i - 1)].focus(); }
+});
+document.addEventListener('pointerdown', e => { if (!$('#p-icon-menu').hidden && !(e.target.closest && e.target.closest('#p-iconpick'))) toggleIconMenu(false); });
+updateIconPick();
+$('#p-group').innerHTML = GROUPS.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+
+/* Voice (per device) */
+function renderVoices() {
+  const sel = $('#v-voice'), st = $('#v-status');
+  if (!sel) return;
+  if (!hasSynth || !germanVoices.length) {
+    sel.innerHTML = '<option value="">Keine deutsche Stimme gefunden</option>';
+    sel.disabled = true;
+    st.textContent = hasSynth ? 'Dieses Gerät hat keine deutsche Stimme installiert. Bitte in den Geräte-Einstellungen eine herunterladen.' : 'Dieses Gerät kann nicht vorlesen.';
+    st.classList.add('err');
+  } else {
+    sel.disabled = false; st.textContent = ''; st.classList.remove('err');
+    sel.innerHTML = germanVoices.map(v => `<option value="${esc(v.voiceURI)}"${voice && v.voiceURI === voice.voiceURI ? ' selected' : ''}>${esc(v.name)}${/^de[-_]DE/i.test(v.lang) ? '' : ' (' + esc(v.lang) + ')'}</option>`).join('');
+  }
+  $('#v-rate').value = String(prefs.rate);
+}
+$('#v-voice').addEventListener('change', e => {
+  voice = germanVoices.find(v => v.voiceURI === e.target.value) || voice;
+  prefs.voice = voice ? voice.voiceURI : '';
+  try { localStorage.setItem('nbd-voice', prefs.voice); } catch {}
+  browserSpeak('Ich brauche Ruhe');
+});
+$('#v-rate').addEventListener('change', e => {
+  prefs.rate = parseFloat(e.target.value) || 0.85;
+  try { localStorage.setItem('nbd-rate', String(prefs.rate)); } catch {}
+  browserSpeak('Ich brauche Ruhe');
+});
+$('#v-test').addEventListener('click', () => speak('Ja. Nein. Ich brauche Ruhe.'));
+
+/* ---------- Angehörige: lists of phrases, pictures and messages ---------- */
+/* Phrase groups are collapsible; remember which ones are open across re-renders. */
+const openGroups = new Set();
+$('#phr-list').addEventListener('toggle', e => {
+  const d = e.target.closest && e.target.closest('details[data-group]');
+  if (d) (d.open ? openGroups.add(d.dataset.group) : openGroups.delete(d.dataset.group));
+}, true);
+
+/* Row buttons: 48 × 48 with an icon; the label is for screen readers and the tooltip. */
+const iconBtn = (cls, attrs, label, icon, off = false) =>
+  `<button class="btn small icon ${cls}" ${attrs} aria-label="${esc(label)}" title="${esc(label)}"${off || !state.canEdit ? ' disabled' : ''}>${icon}</button>`;
+const moveBtn = (dir, x, edge) =>
+  iconBtn(dir, `data-move="${dir}" data-id="${esc(x.id)}"`, `${x.text} ${dir === 'up' ? 'nach oben' : 'nach unten'}`, uiSvg('chevron'), edge);
+const offBtn = (col, x) =>
+  iconBtn('', `data-off="${col}" data-id="${esc(x.id)}" aria-pressed="${!!x.off}"`, x.off ? 'Wieder einblenden' : 'Ausblenden', svg(x.off ? 'eye' : 'eyeoff'));
+const delBtn = (col, x) => {
+  const label = x.source === 'drive' ? 'Entfernen' : 'Löschen';   // Drive items leave a marker so the sync does not bring them back
+  return iconBtn('danger', `data-del="${col}" data-id="${esc(x.id)}" data-label="${label}"`, label, svg('trash'));
+};
+const sub = text => ` <span class="sub">· ${text}</span>`;
+
+function renderCare() {
+  renderVoices();
+  const m = $('#care-mode');
+  if (state.mode === 'remote') m.textContent = state.canEdit
+    ? 'Alles, was du hier hinzufügst, ist sofort auf allen Geräten zu sehen, die diese Seite geöffnet haben.'
+    : 'Zum Hinzufügen und Löschen braucht man Bearbeitungsrechte für diese Seite. Bitte die Person fragen, die sie eingerichtet hat.';
+  else if (state.mode === 'local') m.textContent = 'Alles wird auf diesem iPad gespeichert. Bilder und Nachrichten aus dem Google-Drive-Ordner kommen von selbst dazu; was du hier direkt hinzufügst, gibt es nur auf diesem iPad.';
+  else m.textContent = 'Verbindung wird aufgebaut …';
+  ['#card-media', '#card-msg', '#card-phr'].forEach(id => $(id).querySelectorAll('input, textarea, select, button').forEach(el => { el.disabled = !state.canEdit; }));
+
+  const ds = $('#drive-status');
+  ds.textContent = driveStatus.text;
+  ds.classList.toggle('err', !!driveStatus.err);
+  $('#drive-now').disabled = !driveReady() || syncing;
+  if (driveSrc && driveSrc.renderCard) driveSrc.renderCard();
+
+  $('#media-list').innerHTML = allOf('media').map(x =>
+    `<div class="item${x.off ? ' off' : ''}">${x.kind === 'video' ? svg('play') : `<img class="thumb" src="${esc(x.src)}" alt="">`}` +
+    `<span class="label">${x.kind === 'video' ? 'Video' : 'Foto'}${x.source === 'drive' ? sub('Google Drive') : ''}${x.off ? sub('ausgeblendet') : ''}</span>` +
+    `<span class="actions">${offBtn('media', x)}${delBtn('media', x)}</span></div>`).join('');
+  $('#msg-list').innerHTML = allOf('messages').map(x =>
+    `<div class="item${x.off ? ' off' : ''}">${uiSvg('tab-nachrichten')}` +
+    `<span class="label"><b>${esc(x.from || 'Nachricht')}</b>${x.off ? sub('ausgeblendet') : ''} · ${esc(x.text)}</span>` +
+    `<span class="actions">${offBtn('messages', x)}${delBtn('messages', x)}</span></div>`).join('');
+  $('#phr-list').innerHTML = GROUPS.map(g => {
+    const items = state.phrases.filter(x => groupOf(x) === g.id);
+    if (!items.length) return '';
+    return `<details class="pgroup" data-group="${g.id}"${openGroups.has(g.id) ? ' open' : ''}>` +
+      `<summary><span>${esc(g.name)}</span><span class="gcount">${items.length} ${items.length === 1 ? 'Satz' : 'Sätze'}</span>${uiSvg('chevron', ' class="gchev"')}</summary>` +
+      '<div class="gitems">' + items.map((x, i) =>
+        `<div class="item">${svg(x.icon) || '<span class="noicon"></span>'}<span class="label">${esc(x.text)}</span>` +
+        `<span class="actions">${moveBtn('up', x, i === 0)}${moveBtn('down', x, i === items.length - 1)}${delBtn('phrase', x)}</span></div>`).join('') +
+      '</div></details>';
+  }).join('');
+  restoreFocus();
+}
+
+/* After a re-render, put the keyboard / switch focus back on the button that was just used. */
+let refocus = null;
+function restoreFocus() {
+  if (!refocus) return;
+  const b = $(refocus);
+  refocus = null;
+  const target = b && b.disabled ? b.parentElement.querySelector('[data-move]:not(:disabled)') : b;   // e.g. moved to the top: ▲ is now off
+  if (target) target.focus({ preventScroll: true });
+}
+
+$('#care').addEventListener('click', e => {
+  const b = e.target.closest('[data-move], [data-off], [data-del]');
+  if (!b || b.disabled) return;
+  if (b.dataset.move) movePhrase(b);
+  else if (b.dataset.off) toggleOff(b);
+  else confirmDelete(b);
+});
+
+/* Reorder a phrase within its group: swap it with the neighbouring phrase of the same group. */
+let moving = false;
+async function movePhrase(b) {
+  if (moving) return;
+  const list = [...state.phrases], i = list.findIndex(p => p.id === b.dataset.id);
+  if (i < 0) return;
+  const g = groupOf(list[i]), dir = b.dataset.move;
+  let j = i;
+  do { j += dir === 'up' ? -1 : 1; } while (j >= 0 && j < list.length && groupOf(list[j]) !== g);
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  moving = true; refocus = `#phr-list [data-move="${dir}"][data-id="${CSS.escape(b.dataset.id)}"]`;
+  try { await store.setPhrases(list); }
+  catch { refocus = null; setStatus('#p-status', 'Verschieben hat nicht geklappt.', true); }
+  finally { moving = false; }
+}
+
+/* Hide / show again: the item stays in this list, but the reader no longer sees it in Bilder or Nachrichten. */
+async function toggleOff(b) {
+  const col = b.dataset.off, id = b.dataset.id, item = allOf(col).find(x => x.id === id);
+  if (!item) return;
+  b.disabled = true; refocus = `#care [data-off="${col}"][data-id="${CSS.escape(id)}"]`;
+  try { await store.setOff(col, id, !item.off); }
+  catch { b.disabled = false; refocus = null; }
+}
+
+/* Delete with an in-page confirmation: the first tap asks, a second tap within 4 s deletes. */
+async function confirmDelete(b) {
+  if (!b.dataset.armed) {
+    b.dataset.armed = '1';
+    b.textContent = b.dataset.label === 'Entfernen' ? 'Wirklich entfernen?' : 'Wirklich löschen?';
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.innerHTML = svg('trash'); } }, 4000);
+    return;
+  }
+  b.disabled = true;
+  const col = b.dataset.del, id = b.dataset.id;
+  try {
+    if (col === 'phrase') await store.setPhrases(state.phrases.filter(p => p.id !== id));
+    else await store.remove(col, id);
+  } catch { b.disabled = false; b.textContent = 'Löschen fehlgeschlagen'; }
+}
+
+/* Upload */
+async function shrinkImage(file) {
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) && !(file.type === '' && /\.(jpe?g|png|heic)$/i.test(file.name))) return file;
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const max = 2000, s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    if (s === 1 && file.size < 3e6 && file.type === 'image/jpeg') { URL.revokeObjectURL(url); return file; }
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.86));
+    return blob || file;
+  } catch { return file; }
+}
+function showChosenFiles() {
+  const files = [...($('#f-file').files || [])];
+  $('#f-name').textContent = !files.length ? 'Keine Datei ausgewählt' : files.length === 1 ? files[0].name : `${files.length} Dateien ausgewählt`;
+  $('#f-field').classList.toggle('has-files', files.length > 0);
+}
+$('#f-file').addEventListener('change', showChosenFiles);
+$('#f-upload').addEventListener('click', async () => {
+  const input = $('#f-file');
+  const files = [...(input.files || [])];
+  if (!files.length) { setStatus('#f-status', 'Bitte zuerst ein Foto oder Video auswählen.', true); return; }
+  const btn = $('#f-upload'); btn.disabled = true;
+  let ok = 0, fail = [];
+  for (const [i, f] of files.entries()) {
+    setStatus('#f-status', `Wird hochgeladen … ${i + 1} von ${files.length}`);
+    try {
+      const isVideo = f.type.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/i.test(f.name);
+      const blob = isVideo ? f : await shrinkImage(f);
+      let type = blob.type;
+      if (isVideo && (!type || type === 'video/quicktime' || /\.(mov|m4v)$/i.test(f.name))) type = 'video/mp4';
+      if (!type && !isVideo) type = 'image/jpeg';
+      if (blob.size > MAX_UPLOAD) throw { code: 'too_large' };
+      await store.addMedia(blob, type, isVideo ? 'video' : 'image');
+      ok++;
+    } catch (err) { fail.push(f.name + ': ' + uploadError(err)); }
+  }
+  btn.disabled = false;
+  if (!fail.length) { setStatus('#f-status', ok === 1 ? 'Hinzugefügt.' : `${ok} Dateien hinzugefügt.`); input.value = ''; showChosenFiles(); }
+  else setStatus('#f-status', (ok ? `${ok} hinzugefügt. ` : '') + 'Nicht geklappt: ' + fail.join(' · '), true);
+});
+function uploadError(e) {
+  switch (e && e.code) {
+    case 'too_large': return 'Datei ist größer als 20 MB. Bitte ein kürzeres Video wählen.';
+    case 'unsupported_type': return 'Dieses Format geht nicht. Fotos als JPG/PNG, Videos als MP4.';
+    case 'quota_or_state': return 'Der Speicher ist voll. Bitte alte Dateien löschen.';
+    case 'rate_limited': return 'Zu viele Uploads auf einmal. Bitte kurz warten.';
+    case 'local_full': return 'Der Gerätespeicher ist voll.';
+    default: return 'Hochladen fehlgeschlagen. Bitte noch einmal versuchen.';
+  }
+}
+
+/* Messages */
+$('#m-save').addEventListener('click', async () => {
+  const from = $('#m-from').value.trim(), text = $('#m-text').value.trim();
+  if (!text) { setStatus('#m-status', 'Bitte eine Nachricht eingeben.', true); return; }
+  const btn = $('#m-save'); btn.disabled = true;
+  try {
+    await store.add('messages', { from: from.slice(0, 80), text: text.slice(0, 5000), createdAt: Date.now() });
+    $('#m-text').value = '';
+    try { localStorage.setItem('nbd-from', from); } catch {}
+    setStatus('#m-status', 'Nachricht gespeichert.');
+  } catch { setStatus('#m-status', 'Speichern fehlgeschlagen. Bitte noch einmal versuchen.', true); }
+  btn.disabled = false;
+});
+try { $('#m-from').value = localStorage.getItem('nbd-from') || ''; } catch {}
+
+/* Phrases */
+$('#p-add').addEventListener('click', async () => {
+  const text = $('#p-text').value.trim();
+  if (!text) { setStatus('#p-status', 'Bitte einen Satz eingeben.', true); return; }
+  const group = $('#p-group').value;
+  openGroups.add(group);   // show the new phrase right away
+  try {
+    await store.setPhrases([...state.phrases, { id: 'p' + Date.now().toString(36), text: text.slice(0, 80), icon: $('#p-icon').value, group }]);
+    $('#p-text').value = ''; $('#p-icon').value = ''; updateIconPick();
+    setStatus('#p-status', 'Satz hinzugefügt.');
+  } catch { setStatus('#p-status', 'Speichern fehlgeschlagen.', true); }
+});
+$('#p-reset').addEventListener('click', async e => {
+  const b = e.currentTarget;
+  if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Eigene Sätze werden ersetzt. Sicher?'; setTimeout(() => { delete b.dataset.armed; b.textContent = 'Standardsätze wiederherstellen'; }, 4000); return; }
+  delete b.dataset.armed; b.textContent = 'Standardsätze wiederherstellen';
+  try { await store.setPhrases(DEFAULT_PHRASES); setStatus('#p-status', 'Standardsätze wiederhergestellt.'); }
+  catch { setStatus('#p-status', 'Speichern fehlgeschlagen.', true); }
+});
+
+/* ---------- Google Drive sync ---------- */
+const CAMERA_NAME = /^(img|dsc|dscn|dscf|pxl|vid|mov|mvi|gopr|dji|photo|video|image|bild|foto|whatsapp|screenshot|bildschirmfoto|signal|telegram|pict?)[\s_\-]|^[\d\s_\-.:]+$|^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+const AUTH_ERROR = /needs_login|token_expired|no_client|api_off|needs_reauth|server_not_connected|not_in_manifest|approval_required|blocked_by_policy/;   // stop the whole sync
+const GENERIC_NAME = /^(unbenannt\w*|untitled\b|neues dokument|new document|dokument\b|document\b|notiz\b|note\b|nachricht\b|text\b|kopie von\b|copy of\b)/i;
+const isGoogleType = f => /^application\/vnd\.google-apps\./.test(f.mimeType || '');
+const stemOf = f => {
+  let s = String(f.title || '').normalize('NFC').trim();
+  if (!isGoogleType(f)) s = s.replace(/\.[A-Za-z0-9]{1,5}$/, '');
+  return s.replace(/\s*\(\d+\)$/, '').trim();
+};
+function senderFor(f) {
+  let s = stemOf(f);
+  const m = s.match(/^nachricht\s+von\s+(.+)$/i);
+  if (m) return m[1].trim().slice(0, 80);
+  if (s.includes(' - ')) s = s.split(' - ')[0].trim();
+  return (GENERIC_NAME.test(s) || CAMERA_NAME.test(s + ' ')) ? '' : s.slice(0, 80);
+}
+function parseMessage(f, raw) {
+  let text = String(raw || '').normalize('NFC').replace(/\r\n?/g, '\n').replace(/﻿/g, '')
+    .replace(/[ \t]+\n/g, '\n')                 // markdown line breaks ("  \n")
+    .replace(/^#{1,6}\s+/gm, '').replace(/\*\*|__/g, '');
+  let lines = text.trim().split('\n');
+  let from = senderFor(f);
+  const m = lines.length ? lines[0].match(/^\s*(?:von|from)\s*[:\-]?\s*(.{1,60})$/i) : null;
+  if (m) { from = m[1].trim().replace(/[.,:]+$/, ''); lines = lines.slice(1); }
+  text = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return { from: from.slice(0, 80), text: text.slice(0, 5000) };
+}
+function kindOf(f) {
+  const t = f.mimeType || '';
+  if (t === 'application/vnd.google-apps.folder') return null;
+  if (/^image\/(jpeg|png|gif|webp|heic|heif)$/.test(t)) return 'image';
+  if (/^video\//.test(t)) return 'video';
+  if (t === 'application/vnd.google-apps.document' || /^text\/(plain|markdown)$/.test(t) ||
+      /msword|wordprocessingml|opendocument\.text/.test(t)) return 'message';
+  return null;
+}
+function b64ToBlob(b64, type) {
+  const bin = atob(b64), n = bin.length, bytes = new Uint8Array(n);
+  for (let i = 0; i < n; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: type || '' });
+}
+function extractBytes(res) {
+  for (const b of (res && res.content) || []) {
+    if (!b) continue;
+    if (b.type === 'image' && b.data) return { b64: b.data, type: b.mimeType };
+    if (b.type === 'resource' && b.resource && b.resource.blob) return { b64: b.resource.blob, type: b.resource.mimeType };
+    if (typeof b.blob === 'string') return { b64: b.blob, type: b.mimeType };
+    if (b.type !== 'text' && typeof b.data === 'string') return { b64: b.data, type: b.mimeType };
+  }
+  const p = res && res.payload;
+  if (p && typeof p === 'object' && typeof p.content === 'string' && p.content.length > 64 && /^[A-Za-z0-9+/=\s]+$/.test(p.content))
+    return { b64: p.content.replace(/\s+/g, ''), type: p.mimeType };
+  return null;
+}
+/* Drive through the viewer's Google Drive connector in claude.ai. */
+function mcpDrive(mcp) {
+  async function call(tool, input) {
+    try {
+      return await mcp.callTool(DRIVE.server, tool, input, { cache: false });
+    } catch (e) {
+      if (e && e.retryable) { // reads only: one retry after a short pause
+        await new Promise(r => setTimeout(r, (e.retryAfterMs || 1500) + Math.random() * 1000));
+        return mcp.callTool(DRIVE.server, tool, input, { cache: false });
+      }
+      throw e;
+    }
+  }
+  return {
+    videoLimit: VIDEO_LIMIT, bigVideosOnMac: true,
+    async findFolder() {
+      const r = await call('search_files', { query: `title = '${DRIVE.folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`, excludeContentSnippets: true, pageSize: 20 });
+      const files = (r.payload && Array.isArray(r.payload.files)) ? r.payload.files : [];
+      const hit = files.find(f => f.id === DRIVE.folderId) || files[0];
+      if (!hit) throw { code: 'folder_missing' };
+      return hit.id;
+    },
+    async list(folderId) {
+      const out = new Map();
+      let token = '';
+      for (let page = 0; page < 30; page++) {
+        const input = { query: `'${folderId}' in ancestors and trashed = false`, excludeContentSnippets: true, pageSize: 100 };
+        if (token) input.pageToken = token;
+        const r = await call('search_files', input);
+        const p = (r.payload && typeof r.payload === 'object') ? r.payload : {};
+        const files = Array.isArray(p.files) ? p.files : [];
+        files.forEach(f => f && f.id && out.set(f.id, f));
+        if (!p.nextPageToken || !files.length) break;
+        token = p.nextPageToken;
+      }
+      return [...out.values()];
+    },
+    async download(f) {
+      const bytes = extractBytes(await call('download_file_content', { fileId: f.id }));
+      if (!bytes) throw { code: 'no_content' };
+      return b64ToBlob(bytes.b64, bytes.type || f.mimeType);
+    },
+    async readText(f) {
+      const p = (await call('read_file_content', { fileId: f.id })).payload;
+      return (p && typeof p === 'object') ? (p.fileContent || p.content || '') : (typeof p === 'string' ? p : '');
+    },
+  };
+}
+/* Imports go into the shared db and asset store of the claude.ai page. */
+function remoteSink(db, assets) {
+  return {
+    maxSize: MAX_UPLOAD,
+    async lock() { // one device at a time
+      try {
+        const lease = await db.doc('settings/drivesync').acquire({ holder: 'v' + Math.random().toString(36).slice(2), ttlMs: 180000 });
+        return !(lease && lease.acquired === false);
+      } catch { return true; }
+    },
+    async putMedia(f, data, blob, type) {
+      const up = await assets.upload(blob, { type });
+      try { await db.doc('media/gd-' + f.id).set({ ...data, asset: up.id }); }
+      catch (e) { try { await assets.delete(up.id); } catch {} throw e; }
+    },
+    putMessage: (f, data) => db.doc('messages/gd-' + f.id).set(data),
+    async drop(col, v) { await db.doc(col + '/' + v.docId).delete(); if (v.asset) assets.delete(v.asset).catch(() => {}); },
+  };
+}
+async function importMedia(f, kind) {
+  let blob = await driveSrc.download(f);
+  let type = blob.type;
+  if (kind === 'image') {
+    blob = await shrinkImage(blob);
+    type = blob.type;
+    if (!/^image\/(jpeg|png|gif|webp)$/.test(type)) throw { code: 'heic' };
+  } else if (!/^video\/(mp4|webm)$/.test(type)) type = 'video/mp4'; // .mov from iPhones plays as mp4
+  if (blob.size > driveSink.maxSize) throw { code: 'too_large', limit: driveSink.maxSize };
+  await driveSink.putMedia(f, { kind, createdAt: Date.now(), source: 'drive', driveId: f.id, driveFile: String(f.title || '').slice(0, 200) }, blob, type);
+}
+async function importMessage(f) {
+  const { from, text } = parseMessage(f, await driveSrc.readText(f));
+  if (!text) return false;
+  const prev = allOf('messages').find(m => m.id === 'gd-' + f.id);   // keep "hidden" when the file is edited
+  await driveSink.putMessage(f, { from, text, createdAt: Date.parse(f.modifiedTime) || Date.now(), source: 'drive', driveId: f.id, driveModified: f.modifiedTime || '', ...(prev && prev.off ? { off: true } : {}) });
+  return true;
+}
+function driveErrorText(e) {
+  switch (e && e.code) {
+    case 'needs_login': return 'Bitte einmal mit Google anmelden. Danach kommen Bilder und Nachrichten aus dem Ordner „Nah bei dir“ von selbst.';
+    case 'token_expired': return 'Die Google-Anmeldung wird erneuert, sobald das iPad kurz nicht benutzt wird. Oder einfach „Jetzt nachsehen“ tippen.';
+    case 'no_client': return 'Diese Web-Version ist noch nicht mit Google verbunden: Die Client-ID fehlt.';
+    case 'api_off': return 'Im Google-Cloud-Projekt ist die Google-Drive-API noch nicht eingeschaltet.';
+    case 'server_not_connected': return 'Google Drive ist nicht verbunden. In claude.ai unter Einstellungen → Connectors „Google Drive“ hinzufügen.';
+    case 'needs_reauth': return 'Google Drive muss neu verbunden werden: claude.ai → Einstellungen → Connectors.';
+    case 'not_in_manifest':
+    case 'approval_required': return 'Google Drive ist für diese Seite nicht erlaubt. Mit „Jetzt nachsehen“ fragt die Seite erneut, oder im Menü „Berechtigungen“ der Seite erlauben.';
+    case 'selection_required': return 'Es gibt mehrere Google-Drive-Verbindungen. Bitte in claude.ai eine auswählen.';
+    case 'blocked_by_policy': return 'Google Drive ist für dieses Konto gesperrt.';
+    case 'server_unavailable': return 'Google Drive antwortet gerade nicht. Beim nächsten Öffnen wird es erneut versucht.';
+    case 'folder_missing': return 'Der Ordner „Nah bei dir“ wurde in Google Drive nicht gefunden. Ist das richtige Google-Konto verbunden?';
+    case 'not_granted': case 'capability_disabled': case 'capability_removed': return 'Google Drive kann in dieser Ansicht nicht gelesen werden.';
+    default: return 'Google Drive konnte gerade nicht gelesen werden. Beim nächsten Öffnen wird es erneut versucht.';
+  }
+}
+function skipReason(e) {
+  switch (e && e.code) {
+    case 'too_large': return `zu groß (höchstens ${Math.round((e.limit || MAX_UPLOAD) / 1048576)} MB)`;
+    case 'word': return 'Word-Datei, bitte als Google-Dokument oder Textdatei ablegen';
+    case 'heic': return 'Format kann dieses Gerät nicht umwandeln, bitte als JPG ablegen';
+    case 'unsupported_type': return 'Format wird nicht unterstützt';
+    case 'quota_or_state': return 'Speicher voll';
+    case 'no_content': return 'Inhalt nicht lesbar';
+    default: return 'nicht geklappt';
+  }
+}
+function setSyncNote(on) { document.querySelectorAll('[data-sync]').forEach(el => { el.hidden = !on; }); }
+async function syncDrive(force, waited = 0) {
+  if (!driveReady() || syncing) return;
+  if (!force && Date.now() - lastSync < 120000) return;
+  if (driveIdx.media === null || driveIdx.messages === null) { // wait for the first db snapshots
+    if (waited < 20) setTimeout(() => syncDrive(force, waited + 1), 500);
+    return;
+  }
+  if (driveSrc.ready) { // web version: a valid Google sign-in (may renew it by a short redirect)
+    let ok = false;
+    try { ok = await driveSrc.ready(force); }
+    catch (e) { driveStatus = { text: driveErrorText(e), err: true }; lastSync = Date.now(); }
+    if (!ok) { if (!$('#care').hidden) renderCare(); return; }
+  }
+  syncing = true; lastSync = Date.now();
+  setSyncNote(true); if (!$('#care').hidden) renderCare();
+  try {
+    if (!(await driveSink.lock())) { driveStatus = { text: 'Ein anderes Gerät gleicht gerade ab.', err: false }; return; }
+    const files = await driveSrc.list(await driveSrc.findFolder());
+    const seen = new Set(files.map(f => f.id));
+    let added = 0, removed = 0;
+    const skipped = [];
+    const isBigVideo = f => kindOf(f) === 'video' && +f.fileSize > driveSrc.videoLimit;
+    const bigNew = files.filter(f => isBigVideo(f) && !driveIdx.media.has(f.id));
+    const bigWaiting = driveSrc.bigVideosOnMac ? bigNew.length : 0;   // claude.ai: the Mac shrinks these
+    if (!driveSrc.bigVideosOnMac) bigNew.forEach(f => skipped.push(`${f.title}: ${skipReason({ code: 'too_large', limit: driveSrc.videoLimit })}`));
+    const media = files.filter(f => { const k = kindOf(f); return (k === 'image' || k === 'video') && !isBigVideo(f) && !driveIdx.media.has(f.id); })
+      .sort((a, b) => String(a.createdTime).localeCompare(String(b.createdTime))).slice(0, 12);
+    for (const f of media) {
+      try { await importMedia(f, kindOf(f)); added++; }
+      catch (e) {
+        if (e && AUTH_ERROR.test(e.code || '')) throw e;
+        skipped.push(`${f.title}: ${skipReason(e)}`);
+      }
+    }
+    for (const f of files.filter(f => kindOf(f) === 'message')) {
+      const known = driveIdx.messages.get(f.id);
+      if (known && (known.hidden || known.modified === f.modifiedTime)) continue;
+      try { if (await importMessage(f)) added++; }
+      catch (e) {
+        if (e && AUTH_ERROR.test(e.code || '')) throw e;
+        skipped.push(`${f.title}: ${skipReason(e)}`);
+      }
+    }
+    // Files deleted from the folder leave the app too (only after a complete listing).
+    for (const [driveId, v] of driveIdx.media) {
+      if (seen.has(driveId)) continue;
+      try { await driveSink.drop('media', v); removed++; } catch {}
+    }
+    for (const [driveId, v] of driveIdx.messages) {
+      if (seen.has(driveId)) continue;
+      try { await driveSink.drop('messages', v); removed++; } catch {}
+    }
+    const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const parts = [`Zuletzt nachgesehen um ${time} Uhr.`];
+    if (added) parts.push(added === 1 ? '1 neu.' : `${added} neu.`);
+    if (removed) parts.push(`${removed} entfernt.`);
+    if (media.length === 12) parts.push('Weitere folgen beim nächsten Öffnen.');
+    if (bigWaiting) parts.push(bigWaiting === 1
+      ? '1 großes Video wird vom Mac verkleinert und erscheint innerhalb einer Stunde (Mac muss an sein).'
+      : `${bigWaiting} große Videos werden vom Mac verkleinert und erscheinen innerhalb einer Stunde (Mac muss an sein).`);
+    if (skipped.length) parts.push('Übersprungen: ' + skipped.join(' · '));
+    driveStatus = { text: parts.join(' '), err: skipped.length > 0 };
+  } catch (e) {
+    driveStatus = { text: driveErrorText(e), err: true };
+  } finally {
+    syncing = false;
+    setSyncNote(false);
+    if (!$('#care').hidden) renderCare();
+  }
+}
+$('#drive-now').addEventListener('click', () => syncDrive(true));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentTab !== 'sprechen' && !openOverlay) syncDrive(false);
+});
+
+/* ---------- Web version: Google Drive without Claude ----------
+   Signs in with Google's OAuth token flow by redirect (no popups, so it also works as a home-screen app)
+   and reads the folder through the Drive REST API. A token lasts an hour; it is renewed silently by a
+   short redirect while nobody is using the app. Everything imported stays on this device (IndexedDB). */
+webDrive = (() => {
+  const CLIENT_ID = '';
+  const SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+  const API = 'https://www.googleapis.com/drive/v3/';
+  const ALL = 'supportsAllDrives=true&includeItemsFromAllDrives=true';
+  const KEY = 'nbd-google';
+  const here = () => location.href.split(/[?#]/)[0];
+  const configured = () => !!CLIENT_ID && !CLIENT_ID.startsWith('__');
+  let auth = {};   // { token, exp, email, signedIn, silentFailed, nonce }
+  try { auth = JSON.parse(localStorage.getItem(KEY)) || {}; } catch {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(auth)); } catch {} };
+  const valid = () => !!auth.token && auth.exp - Date.now() > 60000;
+  const renewable = () => configured() && auth.signedIn && !(auth.silentFailed && Date.now() - auth.silentFailed < 6 * 3600e3);
+
+  function signIn(silent, sync) {
+    auth.nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    save();
+    const p = new URLSearchParams({
+      client_id: CLIENT_ID, redirect_uri: here(), response_type: 'token', scope: SCOPE, include_granted_scopes: 'true',
+      prompt: silent ? 'none' : 'select_account',
+      state: JSON.stringify({ n: auth.nonce, care: !$('#care').hidden, sync: !!sync, silent: !!silent }),
+    });
+    if (auth.email) p.set('login_hint', auth.email);
+    location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + p);
+  }
+
+  // Back from Google: take the token (only for a sign-in this device started), then clean the address.
+  let back = null;
+  if (/[#&](state|access_token|error)=/.test(location.hash)) {
+    const h = new URLSearchParams(location.hash.slice(1));
+    let st = {};
+    try { st = JSON.parse(h.get('state') || '{}'); } catch {}
+    if (st.n && st.n === auth.nonce) {
+      delete auth.nonce;
+      if (h.get('access_token')) {
+        Object.assign(auth, { token: h.get('access_token'), exp: Date.now() + (+h.get('expires_in') || 3600) * 1000, signedIn: true, silentFailed: 0 });
+      } else if (st.silent) auth.silentFailed = Date.now();   // Google wants a click: ask in the Angehörige area
+      save();
+      back = st;
+    }
+    history.replaceState(null, '', here());
+  }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch {}
+
+  async function api(path, raw) {
+    for (let attempt = 0; ; attempt++) {
+      const r = await fetch(API + path, { headers: { Authorization: 'Bearer ' + auth.token } }).catch(() => null);
+      if (r && r.ok) return raw ? r : r.json();
+      if (r && r.status === 401) { auth.token = ''; save(); throw { code: 'token_expired' }; }
+      if (attempt < 1 && (!r || r.status === 429 || r.status >= 500)) { await new Promise(res => setTimeout(res, 1500 + Math.random() * 1000)); continue; }
+      if (r && r.status === 404) throw { code: 'no_content' };
+      if (r && r.status === 403) {
+        const t = await r.text().catch(() => '');
+        throw { code: /accessNotConfigured|has not been used|is disabled/i.test(t) ? 'api_off' : /insufficient|scope/i.test(t) ? 'needs_login' : 'server_unavailable' };
+      }
+      throw { code: 'server_unavailable' };
+    }
+  }
+  const q = text => 'q=' + encodeURIComponent(text);
+  const FIELDS = 'fields=' + encodeURIComponent('nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime)');
+
+  const src = {
+    videoLimit: 250 * 1024 * 1024, bigVideosOnMac: false,
+    async ready(force) {
+      if (!configured()) throw { code: 'no_client' };
+      if (valid()) {
+        if (!auth.email) api('about?fields=user(emailAddress)').then(r => { auth.email = (r.user && r.user.emailAddress) || ''; save(); if (!$('#care').hidden) renderCare(); }).catch(() => {});
+        return true;
+      }
+      if (!auth.signedIn) throw { code: 'needs_login' };
+      if (force) { signIn(renewable(), true); return false; }   // the caregiver tapped "Jetzt nachsehen"
+      if (!renewable()) throw { code: 'needs_login' };
+      throw { code: 'token_expired' };
+    },
+    async findFolder() {
+      const r = await api(`files?${q(`name = '${DRIVE.folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`)}&fields=files(id)&pageSize=20&${ALL}`);
+      const files = r.files || [];
+      const hit = files.find(f => f.id === DRIVE.folderId) || files[0];
+      if (!hit) throw { code: 'folder_missing' };
+      return hit.id;
+    },
+    async list(folderId) {   // the folder and its subfolders
+      const out = [], queue = [folderId], folders = new Set(queue);
+      while (queue.length) {
+        if (folders.size > 60) throw { code: 'server_unavailable' };   // never act on an incomplete listing
+        const parent = queue.shift();
+        let token = '';
+        for (let page = 0; page < 20; page++) {
+          const r = await api(`files?${q(`'${parent}' in parents and trashed = false`)}&${FIELDS}&pageSize=1000&${ALL}` + (token ? '&pageToken=' + encodeURIComponent(token) : ''));
+          for (const f of r.files || []) {
+            if (f.mimeType === 'application/vnd.google-apps.folder') { if (!folders.has(f.id)) { folders.add(f.id); queue.push(f.id); } }
+            else out.push({ id: f.id, title: f.name, mimeType: f.mimeType, fileSize: f.size, createdTime: f.createdTime, modifiedTime: f.modifiedTime });
+          }
+          if (!r.nextPageToken) break;
+          token = r.nextPageToken;
+        }
+      }
+      return out;
+    },
+    async download(f) {
+      const b = await (await api(`files/${f.id}?alt=media&supportsAllDrives=true`, true)).blob();
+      return b.type === f.mimeType ? b : b.slice(0, b.size, f.mimeType);
+    },
+    async readText(f) {
+      if (f.mimeType === 'application/vnd.google-apps.document') return (await api(`files/${f.id}/export?mimeType=text%2Fplain`, true)).text();
+      if (/^text\//.test(f.mimeType)) return (await api(`files/${f.id}?alt=media&supportsAllDrives=true`, true)).text();
+      throw { code: 'word' };
+    },
+    renderCard() {
+      let btn = $('#g-login');
+      if (!btn) {
+        $('#drive-now').closest('.row').insertAdjacentHTML('beforebegin', '<p class="note" id="g-who"></p>');
+        $('#drive-now').insertAdjacentHTML('beforebegin', '<button class="btn small" id="g-login"></button>');
+        btn = $('#g-login');
+        btn.addEventListener('click', () => {
+          if (!configured()) { driveStatus = { text: driveErrorText({ code: 'no_client' }), err: true }; renderCare(); return; }
+          if (!auth.signedIn) { signIn(false, true); return; }
+          if (!btn.dataset.armed) {   // second tap within 4 s signs out
+            btn.dataset.armed = '1'; btn.textContent = 'Wirklich abmelden?';
+            setTimeout(() => { delete btn.dataset.armed; src.renderCard(); }, 4000);
+            return;
+          }
+          if (auth.token) fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(auth.token), { method: 'POST', mode: 'no-cors' }).catch(() => {});
+          auth = {}; save();
+          delete btn.dataset.armed;
+          driveStatus = { text: 'Abgemeldet. Bilder und Nachrichten bleiben auf diesem iPad.', err: false };
+          renderCare();
+        });
+      }
+      if (!btn.dataset.armed) btn.textContent = auth.signedIn ? 'Bei Google abmelden' : 'Mit Google anmelden';
+      if (!auth.signedIn) btn.classList.add('primary'); else btn.classList.remove('primary');
+      $('#g-who').textContent = auth.signedIn
+        ? `Angemeldet bei Google${auth.email ? ' als ' + auth.email : ''}.`
+        : 'Noch nicht bei Google angemeldet. Einmal anmelden, mit dem Konto, das den Ordner „Nah bei dir“ sehen darf.';
+      $('#drive-now').disabled = syncing || !auth.signedIn;
+    },
+  };
+
+  // Keep the sign-in fresh while nobody is using the app, so nobody is interrupted.
+  let lastInput = Date.now();
+  ['pointerdown', 'keydown'].forEach(t => addEventListener(t, () => { lastInput = Date.now(); }, true));
+  const quiet = () => document.visibilityState === 'visible' && !openOverlay && !(hasSynth && speechSynthesis.speaking);
+  setInterval(() => {
+    if (renewable() && auth.exp - Date.now() < 10 * 60e3 && quiet() && Date.now() - lastInput > 120000) signIn(true, false);
+  }, 60000);
+  document.addEventListener('visibilitychange', () => {   // woken up after a long pause: renew before anyone starts tapping
+    if (document.visibilityState === 'visible' && renewable() && !valid() && !openOverlay) signIn(true, false);
+  });
+
+  // Back from a sign-in: reopen the Angehörige area if it was open, and look for new files.
+  if (back) {
+    if (back.care) openCare();
+    const kick = (n = 0) => driveReady() ? ((back.sync || currentTab !== 'sprechen') && syncDrive(true)) : n < 40 && setTimeout(() => kick(n + 1), 250);
+    kick();
+  }
+  return src;
+})();
+
+/* ---------- Render all ---------- */
+function render() {
+  renderPhrases(); renderMedia(); renderMessages();
+  if (!$('#care').hidden) renderCare();
+  if (openOverlay && openOverlay.id === 'viewer' && state.media && viewIndex >= state.media.length) showItem();
+}
+const byNewest = (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+
+/* ---------- Stores ---------- */
+let store = null;
+
+function remoteStore(db, assets) {
+  const s = {
+    async addMedia(blob, type, kind) {
+      const r = await assets.upload(blob, { type });
+      try { await db.collection('media').add({ asset: r.id, kind, createdAt: Date.now() }); }
+      catch (e) { try { await assets.delete(r.id); } catch {} throw e; }
+    },
+    add: (col, data) => db.collection(col).add(data),
+    async remove(col, id) {
+      const item = allOf(col).find(m => m.id === id);
+      if (item && item.source === 'drive') {
+        // Keep a hidden marker so the Drive sync does not add it again.
+        await db.doc(col + '/' + id).update(col === 'media' ? { hidden: true, asset: '' } : { hidden: true });
+      } else await db.doc(col + '/' + id).delete();
+      if (item && item.asset) { try { await assets.delete(item.asset); } catch {} }
+    },
+    setPhrases: items => db.doc('settings/phrases').set({ items }),
+    markRead: id => db.doc('messages/' + id).update({ readAt: Date.now() }),
+    setOff: (col, id, off) => db.doc(col + '/' + id).update({ off }),
+  };
+  const slow = setTimeout(() => {
+    if (state.media === null) $('#media').innerHTML = '<p class="loading">Die Verbindung ist gerade langsam. Bilder kommen gleich.</p>';
+    if (state.messages === null) $('#messages').innerHTML = '<p class="loading">Die Verbindung ist gerade langsam. Nachrichten kommen gleich.</p>';
+  }, 10000);
+  const fail = what => () => { clearTimeout(slow); if (state[what] === null) { state[what] = []; render(); } };
+  db.collection('media').onSnapshot(snap => {
+    if (!snap.metadata.fromCache) clearTimeout(slow);
+    const all = snap.docs.map(d => { const v = d.data(); return { id: d.id, asset: v.asset, kind: v.kind, createdAt: v.createdAt, source: v.source || '', driveId: v.driveId || '', hidden: !!v.hidden, off: !!v.off, src: '/_blob/' + v.asset }; });
+    driveIdx.media = new Map(all.filter(m => m.source === 'drive' && m.driveId).map(m => [m.driveId, { docId: m.id, asset: m.asset, hidden: m.hidden }]));
+    state.allMedia = all.filter(m => !m.hidden && m.asset).sort(byNewest);
+    state.media = state.allMedia.filter(m => !m.off);
+    render();
+  }, fail('media'));
+  db.collection('messages').onSnapshot(snap => {
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    driveIdx.messages = new Map(all.filter(m => m.source === 'drive' && m.driveId).map(m => [m.driveId, { docId: m.id, modified: m.driveModified || '', hidden: !!m.hidden }]));
+    state.allMessages = all.filter(m => !m.hidden).sort(byNewest);
+    state.messages = state.allMessages.filter(m => !m.off);
+    render();
+  }, fail('messages'));
+  db.doc('settings/phrases').onSnapshot(snap => {
+    const items = snap.exists && Array.isArray(snap.data().items) ? snap.data().items : null;
+    state.phrases = items || DEFAULT_PHRASES;
+    render();
+  }, () => {});
+  return s;
+}
+
+function localStore() {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('nah-bei-dir', 1);
+    r.onupgradeneeded = () => ['media', 'messages', 'kv'].forEach(n => r.result.createObjectStore(n, { keyPath: 'id' }));
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const tx = async (name, mode, fn) => {
+    const d = await open();
+    return new Promise((res, rej) => {
+      const t = d.transaction(name, mode); const st = t.objectStore(name); let out;
+      Promise.resolve(fn(st)).then(v => { out = v; });
+      t.oncomplete = () => res(out); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || { code: 'local_full' });
+    });
+  };
+  const all = name => tx(name, 'readonly', st => new Promise(r => { const q = st.getAll(); q.onsuccess = () => r(q.result); }));
+  const put = (name, rec) => tx(name, 'readwrite', st => st.put(rec));
+  const patch = (name, rid, fields) => tx(name, 'readwrite', st => new Promise((res, rej) => {
+    const q = st.get(rid);
+    q.onsuccess = () => { if (q.result) st.put({ ...q.result, ...fields }); res(); };
+    q.onerror = () => rej(q.error);
+  }));
+  const urls = new Map();
+  const dropUrl = rid => { if (urls.has(rid)) { URL.revokeObjectURL(urls.get(rid)); urls.delete(rid); } };
+  async function refresh() {
+    try {
+      const [media, messages, kv] = await Promise.all([all('media'), all('messages'), all('kv')]);
+      driveIdx.media = new Map(media.filter(m => m.source === 'drive' && m.driveId).map(m => [m.driveId, { docId: m.id, hidden: !!m.hidden }]));
+      driveIdx.messages = new Map(messages.filter(m => m.source === 'drive' && m.driveId).map(m => [m.driveId, { docId: m.id, modified: m.driveModified || '', hidden: !!m.hidden }]));
+      state.allMedia = media.filter(m => !m.hidden && m.blob).map(m => {
+        if (!urls.has(m.id)) urls.set(m.id, URL.createObjectURL(m.blob));
+        return { id: m.id, kind: m.kind, createdAt: m.createdAt, source: m.source || '', off: !!m.off, src: urls.get(m.id) };
+      }).sort(byNewest);
+      state.media = state.allMedia.filter(m => !m.off);
+      state.allMessages = messages.filter(m => !m.hidden).sort(byNewest);
+      state.messages = state.allMessages.filter(m => !m.off);
+      const ph = kv.find(x => x.id === 'phrases');
+      state.phrases = ph ? ph.items : DEFAULT_PHRASES;
+    } catch {
+      state.media = state.media || []; state.messages = state.messages || [];
+      state.allMedia = state.allMedia || state.media; state.allMessages = state.allMessages || state.messages;
+      driveIdx.media = driveIdx.media || new Map(); driveIdx.messages = driveIdx.messages || new Map();
+    }
+    render();
+  }
+  const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const s = {
+    async addMedia(blob, type, kind) { await put('media', { id: id(), blob, kind, createdAt: Date.now() }); await refresh(); },
+    async add(col, data) { await put(col, { id: id(), ...data }); await refresh(); },
+    async remove(col, rid) {
+      const item = allOf(col).find(m => m.id === rid);
+      // Drive items keep a hidden marker (without the picture) so the sync does not add them again.
+      if (item && item.source === 'drive') await patch(col, rid, col === 'media' ? { hidden: true, blob: null } : { hidden: true });
+      else await tx(col, 'readwrite', st => st.delete(rid));
+      dropUrl(rid);
+      await refresh();
+    },
+    async setPhrases(items) { await put('kv', { id: 'phrases', items }); await refresh(); },
+    async setOff(col, rid, off) { await patch(col, rid, { off }); await refresh(); },
+    async markRead(rid) { await patch('messages', rid, { readAt: Date.now() }); await refresh(); },
+    // Where the Drive sync of the web version keeps its imports.
+    drive: {
+      maxSize: Infinity,
+      lock: async () => true,
+      async putMedia(f, data, blob) { await put('media', { id: 'gd-' + f.id, ...data, blob }); dropUrl('gd-' + f.id); await refresh(); },
+      async putMessage(f, data) { await put('messages', { id: 'gd-' + f.id, ...data }); await refresh(); },
+      async drop(col, v) { await tx(col, 'readwrite', st => st.delete(v.docId)); dropUrl(v.docId); await refresh(); },
+    },
+  };
+  refresh();
+  return s;
+}
+
+renderPhrases();
+(async () => {
+  const [db, assets, mcp] = await Promise.all([use('db'), use('assets'), use('mcp')]);
+  if (db) {
+    state.mode = 'remote'; state.canEdit = !!assets;
+    store = remoteStore(db, assets);
+    driveSrc = mcp ? mcpDrive(mcp) : null;
+    driveSink = assets ? remoteSink(db, assets) : null;
+    if (!mcp) driveStatus = { text: 'Google Drive kann in dieser Ansicht nicht gelesen werden.', err: true };
+    else if (!assets) driveStatus = { text: 'Zum Abgleichen mit Google Drive braucht man Bearbeitungsrechte für diese Seite.', err: true };
+  } else {
+    state.mode = 'local'; state.canEdit = 'indexedDB' in window;
+    store = localStore();
+    if (webDrive && state.canEdit) { driveSrc = webDrive; driveSink = store.drive; }
+  }
+  if (driveReady() && currentTab !== 'sprechen' && !openOverlay) syncDrive(false);
+  render();
+})();
+})();
+</script>
+
+</body>
+</html>
