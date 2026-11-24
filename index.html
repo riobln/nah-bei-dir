@@ -608,18 +608,40 @@ function voiceScore(v) {
   if (NOVELTY.test(v.name)) s -= 100;
   return s;
 }
+/* iOS often hands out the voice list late and without a 'voiceschanged' event, above all when the
+   home-screen app is reopened. So ask again for a few seconds, when the app comes back to the front,
+   and on the first tap, until the German voices (and the chosen one) are there. */
+const VOICE_TRIES = 40;   // × 250 ms
+let voiceTries = 0, voiceTimer = null, voiceKey = '';
+const wantsOtherVoice = () => !!prefs.voice && !(voice && voice.voiceURI === prefs.voice);
 function loadVoices() {
   if (!hasSynth) return;
   try {
-    germanVoices = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a));
+    const list = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a));
+    if (list.length || !germanVoices.length) germanVoices = list;   // never trade a known list for an empty one
     voice = germanVoices.find(v => v.voiceURI === prefs.voice) || germanVoices.find(v => !NOVELTY.test(v.name)) || germanVoices[0] || null;
-    renderVoices();
   } catch {}
+  const waiting = !germanVoices.length || wantsOtherVoice();
+  clearTimeout(voiceTimer);
+  if (waiting && voiceTries < VOICE_TRIES) voiceTimer = setTimeout(() => { voiceTries++; loadVoices(); }, 250);
+  const key = germanVoices.map(v => v.voiceURI).join('|') + '#' + (voice ? voice.voiceURI : '') + '#' + (waiting && voiceTries < VOICE_TRIES);
+  if (key !== voiceKey) { voiceKey = key; renderVoices(); }   // only when something changed, so an open list is not reset
 }
-if (hasSynth) { loadVoices(); try { speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch { try { speechSynthesis.onvoiceschanged = loadVoices; } catch {} } }
+const reloadVoices = () => { voiceTries = 0; loadVoices(); };
+if (hasSynth) {
+  loadVoices();
+  try { speechSynthesis.addEventListener('voiceschanged', reloadVoices); } catch { try { speechSynthesis.onvoiceschanged = reloadVoices; } catch {} }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reloadVoices(); });
+  addEventListener('pageshow', reloadVoices);
+  addEventListener('pointerdown', () => { if (!germanVoices.length || wantsOtherVoice()) reloadVoices(); }, true);
+}
 function browserSpeak(text) {
   if (!hasSynth) return;
   try {
+    // A voice object kept from before the app was in the background may no longer work: take a fresh one.
+    const fresh = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang));
+    if (fresh.length) voice = fresh.find(v => v.voiceURI === (voice ? voice.voiceURI : prefs.voice)) || voice;
+    if (!germanVoices.length || wantsOtherVoice()) loadVoices();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = voice ? voice.lang : 'de-DE'; u.rate = prefs.rate;
@@ -896,7 +918,7 @@ $('#reader-close').addEventListener('click', close);
   b.addEventListener('contextmenu', e => e.preventDefault());
   b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openCare(); } });
 })();
-function openCare() { renderCare(); open($('#care')); document.body.classList.add('care-open'); }
+function openCare() { if (hasSynth && (!germanVoices.length || wantsOtherVoice())) reloadVoices(); renderCare(); open($('#care')); document.body.classList.add('care-open'); }
 $('#care-close').addEventListener('click', close);
 
 /* ---------- Hell / dunkel (per device) ---------- */
@@ -945,10 +967,13 @@ $('#p-group').innerHTML = GROUPS.map(g => `<option value="${g.id}">${esc(g.name)
 function renderVoices() {
   const sel = $('#v-voice'), st = $('#v-status');
   if (!sel) return;
-  if (!hasSynth || !germanVoices.length) {
+  if (hasSynth && !germanVoices.length && voiceTries < VOICE_TRIES) {
+    sel.innerHTML = '<option value="">Stimmen werden geladen …</option>';
+    sel.disabled = true; st.textContent = ''; st.classList.remove('err');
+  } else if (!hasSynth || !germanVoices.length) {
     sel.innerHTML = '<option value="">Keine deutsche Stimme gefunden</option>';
     sel.disabled = true;
-    st.textContent = hasSynth ? 'Dieses Gerät hat keine deutsche Stimme installiert. Bitte in den Geräte-Einstellungen eine herunterladen.' : 'Dieses Gerät kann nicht vorlesen.';
+    st.textContent = hasSynth ? 'Gerade wurde keine deutsche Stimme gefunden. Falls eine installiert ist: App einmal schließen und neu öffnen. Sonst in den iPad-Einstellungen unter Bedienungshilfen → Gesprochene Inhalte → Stimmen eine deutsche Stimme laden.' : 'Dieses Gerät kann nicht vorlesen.';
     st.classList.add('err');
   } else {
     sel.disabled = false; st.textContent = ''; st.classList.remove('err');
