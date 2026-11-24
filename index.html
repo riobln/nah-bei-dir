@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124210222">
+<meta name="nbd-build" content="20261124211059">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -1738,6 +1738,8 @@ cloudVoice = (() => {
   const PROXY = 'https://script.google.com/macros/s/AKfycbxkU7wvAE5iMjSQZ-opuwDGc9fahYLmL4O2OssHtNd0vYDTTvHGZTtB4Zl8aANfzdjr/exec';
   if (!PROXY || PROXY.startsWith('__')) return null;
   const VOICE = { name: 'de-DE-Standard-H' };      // set in the script; part of the cache key here
+  const FORMAT = 'wav';                             // 24 kHz PCM: no MP3 artefacts on the iPad
+  const RATE_HZ = 24000;
   const audio = new Audio();
   let url = '', turn = 0, problem = '';
 
@@ -1745,10 +1747,10 @@ cloudVoice = (() => {
   // after that the same audio element may also play once a clip has been fetched.
   let unlocked = false;
   const silence = (() => {
-    const n = 800, b = new DataView(new ArrayBuffer(44 + n * 2));
+    const n = RATE_HZ / 10, b = new DataView(new ArrayBuffer(44 + n * 2));   // 0.1 s, same format as the clips
     const w = (o, t) => [...t].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
     w(0, 'RIFF'); b.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true);
-    b.setUint16(22, 1, true); b.setUint32(24, 8000, true); b.setUint32(28, 16000, true); b.setUint16(32, 2, true);
+    b.setUint16(22, 1, true); b.setUint32(24, RATE_HZ, true); b.setUint32(28, RATE_HZ * 2, true); b.setUint16(32, 2, true);
     b.setUint16(34, 16, true); w(36, 'data'); b.setUint32(40, n * 2, true);
     return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
   })();
@@ -1761,11 +1763,14 @@ cloudVoice = (() => {
   // Clips kept on this device
   let dbp = null;
   const db = () => dbp || (dbp = new Promise((res, rej) => {
-    const r = indexedDB.open('nah-bei-dir-voice', 1);
-    r.onupgradeneeded = () => r.result.createObjectStore('clips');
+    const r = indexedDB.open('nah-bei-dir-voice', 2);
+    r.onupgradeneeded = () => {   // version 2: WAV instead of MP3 – drop the old clips
+      if (r.result.objectStoreNames.contains('clips')) r.result.deleteObjectStore('clips');
+      r.result.createObjectStore('clips');
+    };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
-  const keyOf = (text, rate) => `${VOICE.name}|${rate}|${text}`;
+  const keyOf = (text, rate) => `${VOICE.name}|${FORMAT}|${rate}|${text}`;
   async function cached(key) {
     try {
       const d = await db();
@@ -1778,7 +1783,7 @@ cloudVoice = (() => {
 
   async function fetchClip(text, rate) {
     // text/plain keeps this a simple request (no CORS preflight, which Apps Script cannot answer)
-    const r = await fetch(PROXY, { method: 'POST', body: JSON.stringify({ text, rate }) }).catch(() => null);
+    const r = await fetch(PROXY, { method: 'POST', body: JSON.stringify({ text, rate, format: FORMAT }) }).catch(() => null);
     if (!r) { problem = 'Die Google-Stimme ist ohne Internet nur für schon gehörte Sätze da.'; throw { code: 'offline' }; }
     let j = null;
     try { j = r.ok ? await r.json() : null; } catch {}
@@ -1789,7 +1794,23 @@ cloudVoice = (() => {
     const bin = atob(j.audio), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     problem = '';
-    return new Blob([bytes], { type: 'audio/mpeg' });
+    smoothEdges(bytes);
+    return new Blob([bytes], { type: 'audio/wav' });
+  }
+  // Fade the first and last 8 ms in and out, so no clip starts or ends with a click.
+  function smoothEdges(bytes) {
+    try {
+      const d = new DataView(bytes.buffer);
+      let i = 12;
+      while (i + 8 <= bytes.length && String.fromCharCode(...bytes.subarray(i, i + 4)) !== 'data') i += 8 + d.getUint32(i + 4, true);
+      if (i + 8 > bytes.length) return;
+      const start = i + 8, n = Math.floor(Math.min(d.getUint32(i + 4, true), bytes.length - start) / 2), f = Math.min(Math.round(RATE_HZ * 0.008), n >> 1);
+      for (let k = 0; k < f; k++) {
+        const g = k / f;
+        d.setInt16(start + k * 2, Math.round(d.getInt16(start + k * 2, true) * g), true);
+        d.setInt16(start + (n - 1 - k) * 2, Math.round(d.getInt16(start + (n - 1 - k) * 2, true) * g), true);
+      }
+    } catch {}
   }
   async function clip(text, rate) {
     const key = keyOf(text, rate);
