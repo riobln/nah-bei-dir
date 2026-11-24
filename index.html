@@ -485,7 +485,7 @@ body, .navbar, body::before { transition: background-color .35s ease, color .35s
 
     <div class="card" id="card-voice">
       <h3>Stimme</h3>
-      <p class="note">Die Sätze und Nachrichten werden immer mit dieser Stimme dieses Geräts vorgelesen. Auf dem iPad gibt es bessere Stimmen zum Herunterladen: Einstellungen → Bedienungshilfen → Gesprochene Inhalte → Stimmen → Deutsch, zum Beispiel „Anna (Premium)“. Danach diese Seite neu laden.</p>
+      <p class="note">Die Sätze und Nachrichten werden immer mit dieser Stimme dieses Geräts vorgelesen. Heruntergeladene Stimmen wie „Anna (Premium)“ zeigt das iPad hier nicht an. Sie lassen sich trotzdem nutzen: In den iPad-Einstellungen unter Bedienungshilfen → Gesprochene Inhalte → Stimmen → Deutsch die Stimme auswählen und hier „iPad-Standardstimme“ wählen.</p>
       <div class="row">
         <div class="field"><label for="v-voice">Stimme</label><span class="selectwrap"><select id="v-voice"></select><i data-ui="chevron"></i></span></div>
         <div class="field" style="flex:0 1 200px"><label for="v-rate">Tempo</label>
@@ -613,13 +613,18 @@ function voiceScore(v) {
    and on the first tap, until the German voices (and the chosen one) are there. */
 const VOICE_TRIES = 40;   // × 250 ms
 let voiceTries = 0, voiceTimer = null, voiceKey = '';
-const wantsOtherVoice = () => !!prefs.voice && !(voice && voice.voiceURI === prefs.voice);
+/* "system": no fixed voice, so iOS uses the German voice set in Settings → Accessibility → Spoken Content.
+   That is the only way to reach downloaded Enhanced / Premium voices, which Safari hides from web pages. */
+const SYSTEM_VOICE = 'system';
+const useSystemVoice = () => prefs.voice === SYSTEM_VOICE;
+const wantsOtherVoice = () => !!prefs.voice && !useSystemVoice() && !(voice && voice.voiceURI === prefs.voice);
 function loadVoices() {
   if (!hasSynth) return;
   try {
     const list = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a));
     if (list.length || !germanVoices.length) germanVoices = list;   // never trade a known list for an empty one
-    voice = germanVoices.find(v => v.voiceURI === prefs.voice) || germanVoices.find(v => !NOVELTY.test(v.name)) || germanVoices[0] || null;
+    voice = useSystemVoice() ? null
+      : germanVoices.find(v => v.voiceURI === prefs.voice) || germanVoices.find(v => !NOVELTY.test(v.name)) || germanVoices[0] || null;
   } catch {}
   const waiting = !germanVoices.length || wantsOtherVoice();
   clearTimeout(voiceTimer);
@@ -639,7 +644,7 @@ function browserSpeak(text) {
   if (!hasSynth) return;
   try {
     // A voice object kept from before the app was in the background may no longer work: take a fresh one.
-    const fresh = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang));
+    const fresh = useSystemVoice() ? [] : speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang));
     if (fresh.length) voice = fresh.find(v => v.voiceURI === (voice ? voice.voiceURI : prefs.voice)) || voice;
     if (!germanVoices.length || wantsOtherVoice()) loadVoices();
     speechSynthesis.cancel();
@@ -651,7 +656,7 @@ function browserSpeak(text) {
 }
 function speak(text) {
   // Always the device voice when it has a German one: same voice every time.
-  if (hasSynth && (voice || !tts)) { browserSpeak(text); return; }
+  if (hasSynth && (voice || useSystemVoice() || !tts)) { browserSpeak(text); return; }
   if (tts) {
     tts.speak(text, { language: 'de', rate: prefs.rate }).catch(e => {
       const c = e && e.code;
@@ -967,23 +972,31 @@ $('#p-group').innerHTML = GROUPS.map(g => `<option value="${g.id}">${esc(g.name)
 function renderVoices() {
   const sel = $('#v-voice'), st = $('#v-status');
   if (!sel) return;
-  if (hasSynth && !germanVoices.length && voiceTries < VOICE_TRIES) {
+  const systemOpt = `<option value="${SYSTEM_VOICE}"${useSystemVoice() ? ' selected' : ''}>iPad-Standardstimme (aus den Einstellungen)</option>`;
+  if (hasSynth && useSystemVoice()) {
+    sel.disabled = false; st.textContent = ''; st.classList.remove('err');
+    sel.innerHTML = systemOpt + germanVoices.map(v => `<option value="${esc(v.voiceURI)}">${esc(v.name)}${/^de[-_]DE/i.test(v.lang) ? '' : ' (' + esc(v.lang) + ')'}</option>`).join('');
+  } else if (hasSynth && !germanVoices.length && voiceTries < VOICE_TRIES) {
     sel.innerHTML = '<option value="">Stimmen werden geladen …</option>';
     sel.disabled = true; st.textContent = ''; st.classList.remove('err');
   } else if (!hasSynth || !germanVoices.length) {
-    sel.innerHTML = '<option value="">Keine deutsche Stimme gefunden</option>';
-    sel.disabled = true;
+    sel.innerHTML = hasSynth ? systemOpt + '<option value="" selected>Keine deutsche Stimme gefunden</option>' : '<option value="">Keine deutsche Stimme gefunden</option>';
+    sel.disabled = !hasSynth;
     st.textContent = hasSynth ? 'Gerade wurde keine deutsche Stimme gefunden. Falls eine installiert ist: App einmal schließen und neu öffnen. Sonst in den iPad-Einstellungen unter Bedienungshilfen → Gesprochene Inhalte → Stimmen eine deutsche Stimme laden.' : 'Dieses Gerät kann nicht vorlesen.';
     st.classList.add('err');
   } else {
     sel.disabled = false; st.textContent = ''; st.classList.remove('err');
-    sel.innerHTML = germanVoices.map(v => `<option value="${esc(v.voiceURI)}"${voice && v.voiceURI === voice.voiceURI ? ' selected' : ''}>${esc(v.name)}${/^de[-_]DE/i.test(v.lang) ? '' : ' (' + esc(v.lang) + ')'}</option>`).join('');
+    sel.innerHTML = systemOpt + germanVoices.map(v => `<option value="${esc(v.voiceURI)}"${voice && v.voiceURI === voice.voiceURI ? ' selected' : ''}>${esc(v.name)}${/^de[-_]DE/i.test(v.lang) ? '' : ' (' + esc(v.lang) + ')'}</option>`).join('');
   }
   $('#v-rate').value = String(prefs.rate);
 }
 $('#v-voice').addEventListener('change', e => {
-  voice = germanVoices.find(v => v.voiceURI === e.target.value) || voice;
-  prefs.voice = voice ? voice.voiceURI : '';
+  if (e.target.value === SYSTEM_VOICE) { voice = null; prefs.voice = SYSTEM_VOICE; }
+  else {
+    voice = germanVoices.find(v => v.voiceURI === e.target.value) || voice;
+    prefs.voice = voice ? voice.voiceURI : '';
+  }
+  voiceKey = '';
   try { localStorage.setItem('nbd-voice', prefs.voice); } catch {}
   browserSpeak('Ich brauche Ruhe');
 });
