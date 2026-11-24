@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124211545">
+<meta name="nbd-build" content="20261124212233">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -1745,8 +1745,9 @@ cloudVoice = (() => {
   const audio = new Audio();
   let url = '', turn = 0, problem = '';
 
-  // iOS only lets a page play sound it started from a tap. Play a moment of silence on the first taps,
-  // after that the same audio element may also play once a clip has been fetched.
+  // iOS only lets a page play sound it started from a tap. Play a moment of silence once, on the first
+  // touch; after that the same audio element may also play once a clip has been fetched. Only once: every
+  // start of the speaker makes the iPad click, so later touches (swiping between groups) must stay silent.
   let unlocked = false;
   const silence = (() => {
     const n = RATE_HZ / 10, b = new DataView(new ArrayBuffer(44 + n * 2));   // 0.1 s, same format as the clips
@@ -1757,9 +1758,10 @@ cloudVoice = (() => {
     return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
   })();
   addEventListener('pointerdown', () => {
-    if (unlocked || !audio.paused) return;
+    if (unlocked || prefs.voice !== CLOUD_VOICE) return;
+    unlocked = true;                                   // the play() call inside the touch is what unlocks
     audio.src = silence;
-    audio.play().then(() => { unlocked = true; }).catch(() => {});
+    audio.play().catch(e => { if (e && e.name === 'NotAllowedError') unlocked = false; });   // only a refusal counts
   }, true);
 
   // Clips kept on this device
