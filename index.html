@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124212644">
+<meta name="nbd-build" content="20261124213654">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -202,6 +202,31 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .frame img, .frame video { max-width: 100%; max-height: 100%; display: block; position: absolute; inset: 0; margin: auto; }
 #stage { touch-action: pan-y; }   /* let horizontal swipes reach the page instead of the browser */
 #stage img { -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
+/* Own video controls: the iPad's built-in ones are small and cannot be resized. */
+.vctl {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; align-items: center; gap: 16px;
+  padding: 40px 20px 20px; background: linear-gradient(transparent, rgba(0, 0, 0, .6)); color: #fff;
+}
+.vctl button {
+  width: 72px; height: 72px; flex: none; border-radius: 50%; background: rgba(0, 0, 0, .5); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.vctl button svg { width: 36px; height: 36px; }
+.vctl .vtime { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.vctl input[type="range"] {
+  flex: 1; min-width: 0; height: 48px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer;
+  --p: 0%;
+}
+.vctl input[type="range"]::-webkit-slider-runnable-track { height: 12px; border-radius: 6px; background: linear-gradient(to right, #fff var(--p), rgba(255, 255, 255, .35) var(--p)); }
+.vctl input[type="range"]::-moz-range-track { height: 12px; border-radius: 6px; background: linear-gradient(to right, #fff var(--p), rgba(255, 255, 255, .35) var(--p)); }
+.vctl input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 36px; height: 36px; margin-top: -12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.vctl input[type="range"]::-moz-range-thumb { width: 36px; height: 36px; border: 0; border-radius: 50%; background: #fff; }
+@media (max-width: 600px) {
+  .vctl { gap: 10px; padding: 32px 12px 12px; }
+  .vctl button { width: 56px; height: 56px; }
+  .vctl button svg { width: 28px; height: 28px; }
+  .vctl .vtime { font-size: 16px; }
+}
 
 /* Nachrichten: one row per message — sender and date on the left, the text beside it, a check when read */
 #view-nachrichten #messages { display: flex; flex-direction: column; min-height: 0; }
@@ -875,19 +900,66 @@ function showItem() {
   viewIndex = (viewIndex + list.length) % list.length;
   const m = list[viewIndex];
   $('#stage').innerHTML = m.kind === 'video'
-    ? `<video src="${esc(m.src)}" controls playsinline autoplay preload="auto"></video>`
+    ? `<video src="${esc(m.src)}" playsinline autoplay preload="auto"></video>` + VIDEO_CONTROLS
     : `<img src="${esc(m.src)}" alt="Foto ${viewIndex + 1}">`;
   // Start videos right away. This runs inside the tap, so the browser allows sound;
-  // if it still refuses, play muted (the viewer can turn the sound on in the controls).
+  // if it still refuses, play muted (the viewer can turn the sound on with the speaker button).
   const v = $('#stage video');
   if (v) {
     stopSpeaking();
+    wireVideo(v);
     const p = v.play();
     if (p && p.catch) p.catch(() => { v.muted = true; v.play().catch(() => {}); });
   }
   $('#viewer-pos').textContent = `${viewIndex + 1} von ${list.length}`;
   const single = list.length < 2;
   $('#prev').disabled = single; $('#next').disabled = single;
+}
+/* Video controls: one big button to play / pause, a wide timeline, the time, and sound on / off. */
+const V_ICON = {
+  play: svg('play'),
+  pause: '<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M216,48V208a16,16,0,0,1-16,16H160a16,16,0,0,1-16-16V48a16,16,0,0,1,16-16h40A16,16,0,0,1,216,48ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Z"/></svg>',
+  sound: uiSvg('lautsprecher'),
+  muted: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M14.6928 4.28223C15.7953 3.48845 17.3333 4.27629 17.3333 5.63479V26.3652C17.3333 27.7236 15.7953 28.5115 14.6928 27.7177L8.11372 22.9808C7.83007 22.7765 7.4894 22.6667 7.13988 22.6667H5C2.97496 22.6667 1.33333 21.0251 1.33333 19V13C1.33333 10.9749 2.97496 9.33331 5 9.33331H7.13988C7.4894 9.33331 7.83007 9.22341 8.11372 9.01919L14.6928 4.28223Z" fill="currentColor"/><path d="M21 12.5l7 7M28 12.5l-7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>',
+};
+const VIDEO_CONTROLS = '<div class="vctl">' +
+  `<button class="vplay" aria-label="Pause">${V_ICON.pause}</button>` +
+  '<input type="range" class="vseek" min="0" max="1000" step="1" value="0" aria-label="Stelle im Video">' +
+  '<span class="vtime">0:00 / 0:00</span>' +
+  `<button class="vsound" aria-label="Ton aus">${V_ICON.sound}</button></div>`;
+const clock = t => { t = Math.max(0, Math.floor(t || 0)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+function wireVideo(v) {
+  const box = v.parentElement, play = box.querySelector('.vplay'), seek = box.querySelector('.vseek');
+  const time = box.querySelector('.vtime'), sound = box.querySelector('.vsound');
+  let seeking = false;
+  const showPlay = () => {
+    const paused = v.paused || v.ended;
+    play.innerHTML = paused ? V_ICON.play : V_ICON.pause;
+    play.setAttribute('aria-label', paused ? 'Abspielen' : 'Pause');
+  };
+  const showSound = () => {
+    sound.innerHTML = v.muted ? V_ICON.muted : V_ICON.sound;
+    sound.setAttribute('aria-label', v.muted ? 'Ton an' : 'Ton aus');
+  };
+  const showTime = () => {
+    const d = isFinite(v.duration) ? v.duration : 0;
+    if (!seeking) seek.value = d ? Math.round(v.currentTime / d * 1000) : 0;
+    seek.style.setProperty('--p', seek.value / 10 + '%');
+    time.textContent = `${clock(v.currentTime)} / ${clock(d)}`;
+  };
+  ['play', 'pause', 'ended'].forEach(t => v.addEventListener(t, showPlay));
+  v.addEventListener('volumechange', showSound);
+  ['timeupdate', 'loadedmetadata', 'durationchange'].forEach(t => v.addEventListener(t, showTime));
+  play.addEventListener('click', () => { if (v.paused || v.ended) v.play().catch(() => {}); else v.pause(); });
+  sound.addEventListener('click', () => { v.muted = !v.muted; if (!v.muted && v.paused) v.play().catch(() => {}); });
+  seek.addEventListener('input', () => {
+    seeking = true;
+    if (isFinite(v.duration)) v.currentTime = seek.value / 1000 * v.duration;
+    seek.style.setProperty('--p', seek.value / 10 + '%');
+    time.textContent = `${clock(v.currentTime)} / ${clock(v.duration)}`;
+  });
+  seek.addEventListener('change', () => { seeking = false; });
+  showPlay(); showSound(); showTime();
 }
 function step(d) {
   viewIndex += d; showItem();
@@ -904,11 +976,12 @@ $('#next').addEventListener('click', () => step(1));
   let x0 = null, y0 = null, dx = 0, horizontal = null;
   const media = () => s.querySelector('img, video');
   const reset = m => { if (!m) return; m.style.transition = 'transform .22s ease, opacity .22s ease'; m.style.transform = ''; m.style.opacity = ''; };
+  let tapVideo = null;
   s.addEventListener('pointerdown', e => {
     if (e.button > 0) return;
-    // leave the bottom strip of a video to its own controls (play, timeline)
-    if (e.target.tagName === 'VIDEO' && e.clientY > e.target.getBoundingClientRect().bottom - 64) return;
+    if (e.target.closest && e.target.closest('.vctl')) return;   // the video controls handle their own touches
     x0 = e.clientX; y0 = e.clientY; dx = 0; horizontal = null;
+    tapVideo = e.target.tagName === 'VIDEO' ? e.target : null;
   });
   s.addEventListener('pointermove', e => {
     if (x0 === null) return;
@@ -921,6 +994,7 @@ $('#next').addEventListener('click', () => step(1));
   const end = () => {
     if (x0 === null) return;
     x0 = null;
+    if (tapVideo && horizontal === null) { tapVideo.paused || tapVideo.ended ? tapVideo.play().catch(() => {}) : tapVideo.pause(); return; }   // a tap on the video: play / pause
     if (horizontal && Math.abs(dx) > 70 && (state.media || []).length > 1) step(dx < 0 ? 1 : -1);
     else reset(media());
   };
