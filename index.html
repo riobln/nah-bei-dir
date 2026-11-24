@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124205230">
+<meta name="nbd-build" content="20261124210222">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -803,6 +803,53 @@ window.addEventListener('resize', () => {
 
 /* ---------- Media view ---------- */
 let viewIndex = 0;
+/* Videos get a still picture for the grid: Safari on the iPad does not show a video's first frame by
+   itself. It is made once on this device (muted, so iOS allows it) and kept with the video when the store can. */
+const posters = new Map();          // media id -> object URL of the still ('' while it is being made)
+let posterQueue = Promise.resolve();
+const posterFor = m => m.poster || posters.get(m.id) || '';
+function makePoster(src) {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+    let t = null;
+    const done = (blob, err) => { clearTimeout(t); v.removeAttribute('src'); try { v.load(); } catch {} blob ? resolve(blob) : reject(err); };
+    t = setTimeout(() => done(null, 'timeout'), 20000);
+    v.addEventListener('error', () => done(null, 'error'), { once: true });
+    v.addEventListener('loadeddata', async () => {
+      try { await v.play(); v.pause(); } catch {}            // iOS only decodes frames after a (muted) play
+      v.addEventListener('seeked', () => {
+        try {
+          const w = v.videoWidth, h = v.videoHeight;
+          if (!w || !h) return done(null, 'size');
+          const k = Math.min(1, 480 / Math.max(w, h)), c = document.createElement('canvas');
+          c.width = Math.round(w * k); c.height = Math.round(h * k);
+          c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+          c.toBlob(b => done(b, 'blob'), 'image/jpeg', 0.8);
+        } catch (e) { done(null, e); }
+      }, { once: true });
+      v.currentTime = Math.min(0.5, (v.duration || 1) / 3);
+    }, { once: true });
+    v.src = src;
+  });
+}
+function ensurePosters() {
+  for (const m of state.allMedia || []) {
+    if (m.kind !== 'video' || posterFor(m) || posters.has(m.id)) continue;
+    posters.set(m.id, '');
+    posterQueue = posterQueue.then(() => makePoster(m.src)).then(blob => {
+      const url = URL.createObjectURL(blob);
+      posters.set(m.id, url);
+      if (store && store.setPoster) store.setPoster(m.id, blob).catch(() => {});
+      document.querySelectorAll(`[data-poster="${CSS.escape(m.id)}"]`).forEach(el => {
+        const img = document.createElement('img');
+        img.src = url; img.alt = ''; if (el.classList.contains('thumb')) img.className = 'thumb';
+        el.replaceWith(img);
+      });
+    }).catch(() => {});                                       // stays with the play symbol only
+  }
+}
 function renderMedia() {
   const box = $('#media');
   if (state.media === null) return;
@@ -813,9 +860,10 @@ function renderMedia() {
   box.innerHTML = '<div class="grid">' + state.media.map((m, i) =>
     `<button class="tile" data-media="${i}" aria-label="${m.kind === 'video' ? 'Video' : 'Foto'} ${i + 1} öffnen">` +
     (m.kind === 'video'
-      ? `<video src="${esc(m.src)}#t=0.5" preload="metadata" muted playsinline></video><span class="play">${svg('play')}</span>`
+      ? (posterFor(m) ? `<img src="${esc(posterFor(m))}" alt="">` : `<video data-poster="${esc(m.id)}" src="${esc(m.src)}#t=0.5" preload="metadata" muted playsinline></video>`) + `<span class="play">${svg('play')}</span>`
       : `<img src="${esc(m.src)}" alt="" loading="lazy">`) +
     `</button>`).join('') + '</div>';
+  ensurePosters();
 }
 $('#media').addEventListener('click', e => {
   const t = e.target.closest('[data-media]');
@@ -1067,7 +1115,8 @@ function renderCare() {
   if (driveSrc && driveSrc.renderCard) driveSrc.renderCard();
 
   $('#media-list').innerHTML = allOf('media').map(x =>
-    `<div class="item${x.off ? ' off' : ''}">${x.kind === 'video' ? svg('play') : `<img class="thumb" src="${esc(x.src)}" alt="">`}` +
+    `<div class="item${x.off ? ' off' : ''}">${x.kind !== 'video' ? `<img class="thumb" src="${esc(x.src)}" alt="">`
+      : posterFor(x) ? `<img class="thumb" src="${esc(posterFor(x))}" alt="">` : `<span class="thumb" data-poster="${esc(x.id)}"></span>`}` +
     `<span class="label">${x.kind === 'video' ? 'Video' : 'Foto'}${x.source === 'drive' ? sub('Google Drive') : ''}${x.off ? sub('ausgeblendet') : ''}</span>` +
     `<span class="actions">${offBtn('media', x)}${delBtn('media', x)}</span></div>`).join('');
   $('#msg-list').innerHTML = allOf('messages').map(x =>
@@ -1872,7 +1921,7 @@ function localStore() {
     q.onerror = () => rej(q.error);
   }));
   const urls = new Map();
-  const dropUrl = rid => { if (urls.has(rid)) { URL.revokeObjectURL(urls.get(rid)); urls.delete(rid); } };
+  const dropUrl = rid => [rid, 'p:' + rid].forEach(k => { if (urls.has(k)) { URL.revokeObjectURL(urls.get(k)); urls.delete(k); } });
   async function refresh() {
     try {
       const [media, messages, kv] = await Promise.all([all('media'), all('messages'), all('kv')]);
@@ -1880,7 +1929,8 @@ function localStore() {
       driveIdx.messages = new Map(messages.filter(m => m.source === 'drive' && m.driveId).map(m => [m.driveId, { docId: m.id, modified: m.driveModified || '', hidden: !!m.hidden }]));
       state.allMedia = media.filter(m => !m.hidden && m.blob).map(m => {
         if (!urls.has(m.id)) urls.set(m.id, URL.createObjectURL(m.blob));
-        return { id: m.id, kind: m.kind, createdAt: m.createdAt, source: m.source || '', off: !!m.off, src: urls.get(m.id) };
+        if (m.poster && !urls.has('p:' + m.id)) urls.set('p:' + m.id, URL.createObjectURL(m.poster));
+        return { id: m.id, kind: m.kind, createdAt: m.createdAt, source: m.source || '', off: !!m.off, src: urls.get(m.id), poster: urls.get('p:' + m.id) || '' };
       }).sort(byNewest);
       state.media = state.allMedia.filter(m => !m.off);
       state.allMessages = messages.filter(m => !m.hidden).sort(byNewest);
@@ -1909,6 +1959,7 @@ function localStore() {
     async setPhrases(items) { await put('kv', { id: 'phrases', items }); await refresh(); },
     async setOff(col, rid, off) { await patch(col, rid, { off }); await refresh(); },
     async markRead(rid) { await patch('messages', rid, { readAt: Date.now() }); await refresh(); },
+    setPoster: (rid, blob) => patch('media', rid, { poster: blob }),   // no re-render: the still is already on screen
     // Where the Drive sync of the web version keeps its imports.
     drive: {
       maxSize: Infinity,
