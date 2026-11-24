@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124165923">
+<meta name="nbd-build" content="20261124205230">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -618,14 +618,20 @@ let voiceTries = 0, voiceTimer = null, voiceKey = '';
    That is the only way to reach downloaded Enhanced / Premium voices, which Safari hides from web pages. */
 const SYSTEM_VOICE = 'system';
 const useSystemVoice = () => prefs.voice === SYSTEM_VOICE;
-const wantsOtherVoice = () => !!prefs.voice && !useSystemVoice() && !(voice && voice.voiceURI === prefs.voice);
+/* cloudVoice: an online voice, set by the web build (Google "de-DE-Standard-H"). The device voice stays
+   the fallback for when it cannot be reached. */
+const CLOUD_VOICE = 'google';
+let cloudVoice = null;
+const useCloudVoice = () => prefs.voice === CLOUD_VOICE && !!cloudVoice;
+const isSpeaking = () => (hasSynth && speechSynthesis.speaking) || !!(cloudVoice && cloudVoice.playing());
+const wantsOtherVoice = () => !!prefs.voice && !useSystemVoice() && prefs.voice !== CLOUD_VOICE && !(voice && voice.voiceURI === prefs.voice);
 function loadVoices() {
   if (!hasSynth) return;
   try {
     const list = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a));
     if (list.length || !germanVoices.length) germanVoices = list;   // never trade a known list for an empty one
     voice = useSystemVoice() ? null
-      : germanVoices.find(v => v.voiceURI === prefs.voice) || germanVoices.find(v => !NOVELTY.test(v.name)) || germanVoices[0] || null;
+      : germanVoices.find(v => v.voiceURI === prefs.voice && prefs.voice !== CLOUD_VOICE) || germanVoices.find(v => !NOVELTY.test(v.name)) || germanVoices[0] || null;
   } catch {}
   const waiting = !germanVoices.length || wantsOtherVoice();
   clearTimeout(voiceTimer);
@@ -656,6 +662,12 @@ function browserSpeak(text) {
   } catch {}
 }
 function speak(text) {
+  if (useCloudVoice()) {
+    try { hasSynth && speechSynthesis.cancel(); } catch {}
+    cloudVoice.speak(text, prefs.rate).then(() => { if (!$('#care').hidden) renderVoices(); })
+      .catch(() => { browserSpeak(text); if (!$('#care').hidden) renderVoices(); });
+    return;
+  }
   // Always the device voice when it has a German one: same voice every time.
   if (hasSynth && (voice || useSystemVoice() || !tts)) { browserSpeak(text); return; }
   if (tts) {
@@ -668,6 +680,7 @@ function speak(text) {
   }
 }
 function stopSpeaking() {
+  try { cloudVoice && cloudVoice.stop(); } catch {}
   try { tts && tts.stop(); } catch {}
   try { hasSynth && speechSynthesis.cancel(); } catch {}
 }
@@ -973,8 +986,14 @@ $('#p-group').innerHTML = GROUPS.map(g => `<option value="${g.id}">${esc(g.name)
 function renderVoices() {
   const sel = $('#v-voice'), st = $('#v-status');
   if (!sel) return;
-  const systemOpt = `<option value="${SYSTEM_VOICE}"${useSystemVoice() ? ' selected' : ''}>iPad-Standardstimme (aus den Einstellungen)</option>`;
-  if (hasSynth && useSystemVoice()) {
+  const systemOpt = (cloudVoice ? `<option value="${CLOUD_VOICE}"${useCloudVoice() ? ' selected' : ''}>${esc(cloudVoice.label)}</option>` : '')
+    + `<option value="${SYSTEM_VOICE}"${useSystemVoice() ? ' selected' : ''}>iPad-Standardstimme (aus den Einstellungen)</option>`;
+  if (useCloudVoice()) {
+    sel.disabled = false;
+    sel.innerHTML = systemOpt + germanVoices.map(v => `<option value="${esc(v.voiceURI)}">${esc(v.name)}${/^de[-_]DE/i.test(v.lang) ? '' : ' (' + esc(v.lang) + ')'}</option>`).join('');
+    st.textContent = cloudVoice.problem() ? cloudVoice.problem() + ' Bis dahin spricht die iPad-Stimme.' : '';
+    st.classList.toggle('err', !!cloudVoice.problem());
+  } else if (hasSynth && useSystemVoice()) {
     sel.disabled = false; st.textContent = ''; st.classList.remove('err');
     sel.innerHTML = systemOpt + germanVoices.map(v => `<option value="${esc(v.voiceURI)}">${esc(v.name)}${/^de[-_]DE/i.test(v.lang) ? '' : ' (' + esc(v.lang) + ')'}</option>`).join('');
   } else if (hasSynth && !germanVoices.length && voiceTries < VOICE_TRIES) {
@@ -992,19 +1011,21 @@ function renderVoices() {
   $('#v-rate').value = String(prefs.rate);
 }
 $('#v-voice').addEventListener('change', e => {
-  if (e.target.value === SYSTEM_VOICE) { voice = null; prefs.voice = SYSTEM_VOICE; }
+  if (e.target.value === CLOUD_VOICE && cloudVoice) { prefs.voice = CLOUD_VOICE; loadVoices(); }
+  else if (e.target.value === SYSTEM_VOICE) { voice = null; prefs.voice = SYSTEM_VOICE; }
   else {
     voice = germanVoices.find(v => v.voiceURI === e.target.value) || voice;
     prefs.voice = voice ? voice.voiceURI : '';
   }
   voiceKey = '';
   try { localStorage.setItem('nbd-voice', prefs.voice); } catch {}
-  browserSpeak('Ich brauche Ruhe');
+  renderVoices();
+  speak('Ich brauche Ruhe');
 });
 $('#v-rate').addEventListener('change', e => {
   prefs.rate = parseFloat(e.target.value) || 0.85;
   try { localStorage.setItem('nbd-rate', String(prefs.rate)); } catch {}
-  browserSpeak('Ich brauche Ruhe');
+  speak('Ich brauche Ruhe');
 });
 $('#v-test').addEventListener('click', () => speak('Ja. Nein. Ich brauche Ruhe.'));
 
@@ -1607,7 +1628,7 @@ webDrive = (() => {
   // Keep the sign-in fresh while nobody is using the app, so nobody is interrupted.
   let lastInput = Date.now();
   ['pointerdown', 'keydown'].forEach(t => addEventListener(t, () => { lastInput = Date.now(); }, true));
-  const quiet = () => document.visibilityState === 'visible' && !openOverlay && !(hasSynth && speechSynthesis.speaking);
+  const quiet = () => document.visibilityState === 'visible' && !openOverlay && !isSpeaking();
   setInterval(() => {
     if (renewable() && auth.exp - Date.now() < 10 * 60e3 && quiet() && Date.now() - lastInput > 120000) signIn(true, false);
   }, 60000);
@@ -1635,7 +1656,7 @@ webDrive = (() => {
   let newer = '', lastInput = 0;
   ['pointerdown', 'keydown'].forEach(t => addEventListener(t, () => { lastInput = Date.now(); }, true));
   const idle = () => document.visibilityState === 'visible' && !openOverlay && Date.now() - lastInput > 20000
-    && !(hasSynth && speechSynthesis.speaking);
+    && !isSpeaking();
   function reloadIfIdle() {
     if (!newer || !idle()) return;
     let tried = '';
@@ -1657,6 +1678,117 @@ webDrive = (() => {
   setInterval(() => (newer ? reloadIfIdle() : check()), 30 * 60e3);
   setInterval(reloadIfIdle, 60e3);
 })();
+
+/* ---------- Web version: Google voice "de-DE-Standard-H" ----------
+   Safari keeps downloaded iPad voices away from web pages, so the web version can speak with a Google
+   Cloud voice instead. The page holds no key: it asks a small Google Apps Script in the owner's account
+   (tools/voice_proxy.gs), which keeps the key and a hard daily and monthly limit inside Google's free tier.
+   Every text is fetched once and kept on this device (IndexedDB), so it plays at once and without internet
+   afterwards. When the voice cannot be reached, the device voice speaks instead. */
+cloudVoice = (() => {
+  const PROXY = 'https://script.google.com/macros/s/AKfycbxkU7wvAE5iMjSQZ-opuwDGc9fahYLmL4O2OssHtNd0vYDTTvHGZTtB4Zl8aANfzdjr/exec';
+  if (!PROXY || PROXY.startsWith('__')) return null;
+  const VOICE = { name: 'de-DE-Standard-H' };      // set in the script; part of the cache key here
+  const audio = new Audio();
+  let url = '', turn = 0, problem = '';
+
+  // iOS only lets a page play sound it started from a tap. Play a moment of silence on the first taps,
+  // after that the same audio element may also play once a clip has been fetched.
+  let unlocked = false;
+  const silence = (() => {
+    const n = 800, b = new DataView(new ArrayBuffer(44 + n * 2));
+    const w = (o, t) => [...t].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); b.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true);
+    b.setUint16(22, 1, true); b.setUint32(24, 8000, true); b.setUint32(28, 16000, true); b.setUint16(32, 2, true);
+    b.setUint16(34, 16, true); w(36, 'data'); b.setUint32(40, n * 2, true);
+    return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+  })();
+  addEventListener('pointerdown', () => {
+    if (unlocked || !audio.paused) return;
+    audio.src = silence;
+    audio.play().then(() => { unlocked = true; }).catch(() => {});
+  }, true);
+
+  // Clips kept on this device
+  let dbp = null;
+  const db = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('nah-bei-dir-voice', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('clips');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const keyOf = (text, rate) => `${VOICE.name}|${rate}|${text}`;
+  async function cached(key) {
+    try {
+      const d = await db();
+      return await new Promise(res => { const q = d.transaction('clips').objectStore('clips').get(key); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); });
+    } catch { return null; }
+  }
+  async function keep(key, blob) {
+    try { const d = await db(); d.transaction('clips', 'readwrite').objectStore('clips').put(blob, key); } catch {}
+  }
+
+  async function fetchClip(text, rate) {
+    // text/plain keeps this a simple request (no CORS preflight, which Apps Script cannot answer)
+    const r = await fetch(PROXY, { method: 'POST', body: JSON.stringify({ text, rate }) }).catch(() => null);
+    if (!r) { problem = 'Die Google-Stimme ist ohne Internet nur für schon gehörte Sätze da.'; throw { code: 'offline' }; }
+    let j = null;
+    try { j = r.ok ? await r.json() : null; } catch {}
+    if (!j || !j.audio) {
+      problem = j && j.error === 'limit' ? 'Die Google-Stimme hat ihr Tageslimit erreicht.' : 'Die Google-Stimme ist gerade nicht erreichbar.';
+      throw { code: (j && j.error) || 'http_' + r.status };
+    }
+    const bin = atob(j.audio), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    problem = '';
+    return new Blob([bytes], { type: 'audio/mpeg' });
+  }
+  async function clip(text, rate) {
+    const key = keyOf(text, rate);
+    let blob = await cached(key);
+    if (!blob) { blob = await fetchClip(text, rate); keep(key, blob); }
+    return blob;
+  }
+
+  const api = {
+    label: 'Google-Stimme (Standard-H)',
+    problem: () => problem,
+    playing: () => !audio.paused && !audio.ended && audio.src !== silence,
+    async speak(text, rate) {
+      const mine = ++turn;
+      audio.pause();
+      const blob = await clip(text, rate);
+      if (mine !== turn) return;                     // something else was tapped meanwhile
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(blob);
+      audio.src = url;
+      await audio.play();
+    },
+    stop() { turn++; audio.pause(); },
+  };
+
+  // Fetch all phrases ahead, quietly and one by one, so they play at once and also without internet.
+  let warming = false;
+  async function warm() {
+    if (warming || prefs.voice !== CLOUD_VOICE || !navigator.onLine) return;
+    warming = true;
+    try {
+      for (const p of [{ text: 'Ja' }, { text: 'Nein' }, ...state.phrases]) {
+        if (prefs.voice !== CLOUD_VOICE) break;
+        const key = keyOf(p.text, prefs.rate);
+        if (await cached(key)) continue;
+        try { await keep(key, await fetchClip(p.text, prefs.rate)); } catch { break; }
+        await new Promise(r => setTimeout(r, 300));
+      }
+    } finally { warming = false; }
+  }
+  setTimeout(warm, 4000);
+  setInterval(warm, 10 * 60e3);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(warm, 2000); });
+  $('#v-voice').addEventListener('change', () => setTimeout(warm, 1500));
+  $('#v-rate').addEventListener('change', () => setTimeout(warm, 1500));
+  return api;
+})();
+voiceKey = ''; loadVoices();
 
 /* ---------- Render all ---------- */
 function render() {
