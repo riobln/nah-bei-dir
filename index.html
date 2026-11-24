@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
+<meta name="nbd-build" content="20261124165923">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -1621,6 +1622,40 @@ webDrive = (() => {
     kick();
   }
   return src;
+})();
+
+/* ---------- Web version: pick up a new version by itself ----------
+   GitHub Pages lets the browser keep the page for up to 10 minutes and a home-screen app has no reload
+   button. So look for a newer build when the app starts, comes back to the front, and every 30 minutes,
+   and reload only while nobody is using it. */
+(() => {
+  const meta = document.querySelector('meta[name="nbd-build"]');
+  const BUILD = meta ? meta.content : '';
+  if (!BUILD) return;
+  let newer = '', lastInput = 0;
+  ['pointerdown', 'keydown'].forEach(t => addEventListener(t, () => { lastInput = Date.now(); }, true));
+  const idle = () => document.visibilityState === 'visible' && !openOverlay && Date.now() - lastInput > 20000
+    && !(hasSynth && speechSynthesis.speaking);
+  function reloadIfIdle() {
+    if (!newer || !idle()) return;
+    let tried = '';
+    try { tried = localStorage.getItem('nbd-reload-for') || ''; } catch {}
+    if (tried === newer) return;                         // never loop if the browser still serves the old copy
+    try { localStorage.setItem('nbd-reload-for', newer); } catch {}
+    location.reload();
+  }
+  async function check() {
+    try {
+      const r = await fetch(location.href.split(/[?#]/)[0], { cache: 'reload' });   // also refreshes the browser's copy
+      const m = (await r.text()).match(/<meta name="nbd-build" content="([^"]+)"/);
+      if (m && m[1] !== BUILD) newer = m[1];
+    } catch {}
+    reloadIfIdle();
+  }
+  setTimeout(check, 3000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { lastInput = 0; check(); } });
+  setInterval(() => (newer ? reloadIfIdle() : check()), 30 * 60e3);
+  setInterval(reloadIfIdle, 60e3);
 })();
 
 /* ---------- Render all ---------- */
