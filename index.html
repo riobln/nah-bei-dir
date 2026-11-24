@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124212233">
+<meta name="nbd-build" content="20261124212644">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -1742,27 +1742,52 @@ cloudVoice = (() => {
   // The phrases (and Ja / Nein) come as 24 kHz WAV: no MP3 artefacts, and they are short.
   // Messages are longer, so they come as MP3, about six times smaller.
   const formatFor = kind => (kind === 'message' ? 'mp3' : 'wav');
-  const audio = new Audio();
-  let url = '', turn = 0, problem = '';
+  let turn = 0, problem = '';
 
-  // iOS only lets a page play sound it started from a tap. Play a moment of silence once, on the first
-  // touch; after that the same audio element may also play once a clip has been fetched. Only once: every
-  // start of the speaker makes the iPad click, so later touches (swiping between groups) must stay silent.
-  let unlocked = false;
-  const silence = (() => {
-    const n = RATE_HZ / 10, b = new DataView(new ArrayBuffer(44 + n * 2));   // 0.1 s, same format as the clips
-    const w = (o, t) => [...t].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
-    w(0, 'RIFF'); b.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true);
-    b.setUint16(22, 1, true); b.setUint32(24, RATE_HZ, true); b.setUint32(28, RATE_HZ * 2, true); b.setUint16(32, 2, true);
-    b.setUint16(34, 16, true); w(36, 'data'); b.setUint32(40, n * 2, true);
-    return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
-  })();
+  /* Playback through Web Audio, not an <audio> element: iOS ignores the volume of an <audio> element, so a
+     sentence cut off by the next tap stopped mid-wave and clicked. Here the running sentence fades out in
+     30 ms and the next one fades in. The context stays awake for a while, so the speaker does not have to
+     start again (and click) for every sentence. */
+  const AC = window.AudioContext || window.webkitAudioContext;
+  let ctx = null, current = null, idleTimer = null;
+  const decoded = new Map();                       // cache key -> AudioBuffer (the most recent ones)
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}   // also with the ringer switch off
+  function context() {
+    if (!ctx) ctx = new AC();
+    return ctx;
+  }
+  // iOS only lets a page start sound from a touch: wake the context on a touch whenever it is not running
+  // (the first touch, or after the app was in the background). Touches while it runs change nothing.
   addEventListener('pointerdown', () => {
-    if (unlocked || prefs.voice !== CLOUD_VOICE) return;
-    unlocked = true;                                   // the play() call inside the touch is what unlocks
-    audio.src = silence;
-    audio.play().catch(e => { if (e && e.name === 'NotAllowedError') unlocked = false; });   // only a refusal counts
+    if (prefs.voice !== CLOUD_VOICE || !AC) return;
+    const c = context();
+    if (c.state === 'running') return;
+    c.resume().catch(() => {});
+    try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, c.sampleRate); s.connect(c.destination); s.start(0); } catch {}
   }, true);
+  function fadeOut() {
+    if (!current) return;
+    const { src, gain } = current, t = ctx.currentTime;
+    current = null;
+    try {
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(gain.gain.value, t);
+      gain.gain.linearRampToValueAtTime(0, t + 0.03);
+      src.stop(t + 0.04);
+    } catch {}
+  }
+  function sleepLater() {   // let the speaker rest after two quiet minutes (saves battery)
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { if (!current && ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }, 120000);
+  }
+  async function bufferFor(key, blob) {
+    if (decoded.has(key)) return decoded.get(key);
+    const data = await blob.arrayBuffer();
+    const buf = await new Promise((res, rej) => context().decodeAudioData(data, res, rej));
+    decoded.set(key, buf);
+    if (decoded.size > 40) decoded.delete(decoded.keys().next().value);
+    return buf;
+  }
 
   // Clips kept on this device
   let dbp = null;
@@ -1827,18 +1852,30 @@ cloudVoice = (() => {
   const api = {
     label: 'Google-Stimme (Standard-H)',
     problem: () => problem,
-    playing: () => !audio.paused && !audio.ended && audio.src !== silence,
+    playing: () => !!current,
     async speak(text, rate, kind) {
+      if (!AC) throw { code: 'no_web_audio' };
       const mine = ++turn;
-      audio.pause();
-      const blob = await clip(text, rate, formatFor(kind));
+      fadeOut();
+      const c = context();
+      if (c.state !== 'running') c.resume().catch(() => {});
+      const format = formatFor(kind), key = keyOf(text, rate, format);
+      const buf = await bufferFor(key, await clip(text, rate, format));
       if (mine !== turn) return;                     // something else was tapped meanwhile
-      if (url) URL.revokeObjectURL(url);
-      url = URL.createObjectURL(blob);
-      audio.src = url;
-      await audio.play();
+      if (c.state !== 'running') {   // not woken by a touch: give up after a moment, the device voice takes over
+        await Promise.race([c.resume(), new Promise((_, rej) => setTimeout(() => rej({ code: 'audio_locked' }), 1500))]);
+      }
+      const src = c.createBufferSource(), gain = c.createGain(), t = c.currentTime + 0.01;
+      src.buffer = buf;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(1, t + 0.01);
+      src.connect(gain); gain.connect(c.destination);
+      src.start(t);
+      const me = { src, gain };
+      current = me;
+      src.onended = () => { if (current === me) current = null; sleepLater(); };
     },
-    stop() { turn++; audio.pause(); },
+    stop() { turn++; fadeOut(); },
   };
 
   // Fetch all phrases ahead, quietly and one by one, so they play at once and also without internet.
