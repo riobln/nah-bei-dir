@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#000000">
 <meta name="referrer" content="no-referrer">
-<meta name="nbd-build" content="20261124211059">
+<meta name="nbd-build" content="20261124211545">
 <link rel="apple-touch-icon" href="icon.png">
 <meta name="apple-mobile-web-app-title" content="Nah bei dir">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -661,10 +661,10 @@ function browserSpeak(text) {
     speechSynthesis.speak(u);
   } catch {}
 }
-function speak(text) {
+function speak(text, kind = 'phrase') {   // kind 'message': long text, the online voice sends it smaller
   if (useCloudVoice()) {
     try { hasSynth && speechSynthesis.cancel(); } catch {}
-    cloudVoice.speak(text, prefs.rate).then(() => { if (!$('#care').hidden) renderVoices(); })
+    cloudVoice.speak(text, prefs.rate, kind).then(() => { if (!$('#care').hidden) renderVoices(); })
       .catch(() => { browserSpeak(text); if (!$('#care').hidden) renderVoices(); });
     return;
   }
@@ -959,7 +959,7 @@ $('#messages').addEventListener('click', e => {
 });
 $('#read-aloud').addEventListener('click', () => {
   if (!reading) return;
-  speak((reading.from ? 'Von ' + reading.from + '. ' : '') + reading.text.slice(0, 1900));
+  speak((reading.from ? 'Von ' + reading.from + '. ' : '') + reading.text.slice(0, 1900), 'message');
 });
 $('#reader-close').addEventListener('click', close);
 
@@ -1738,8 +1738,10 @@ cloudVoice = (() => {
   const PROXY = 'https://script.google.com/macros/s/AKfycbxkU7wvAE5iMjSQZ-opuwDGc9fahYLmL4O2OssHtNd0vYDTTvHGZTtB4Zl8aANfzdjr/exec';
   if (!PROXY || PROXY.startsWith('__')) return null;
   const VOICE = { name: 'de-DE-Standard-H' };      // set in the script; part of the cache key here
-  const FORMAT = 'wav';                             // 24 kHz PCM: no MP3 artefacts on the iPad
   const RATE_HZ = 24000;
+  // The phrases (and Ja / Nein) come as 24 kHz WAV: no MP3 artefacts, and they are short.
+  // Messages are longer, so they come as MP3, about six times smaller.
+  const formatFor = kind => (kind === 'message' ? 'mp3' : 'wav');
   const audio = new Audio();
   let url = '', turn = 0, problem = '';
 
@@ -1770,7 +1772,7 @@ cloudVoice = (() => {
     };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
-  const keyOf = (text, rate) => `${VOICE.name}|${FORMAT}|${rate}|${text}`;
+  const keyOf = (text, rate, format = 'wav') => `${VOICE.name}|${format}|${rate}|${text}`;
   async function cached(key) {
     try {
       const d = await db();
@@ -1781,9 +1783,9 @@ cloudVoice = (() => {
     try { const d = await db(); d.transaction('clips', 'readwrite').objectStore('clips').put(blob, key); } catch {}
   }
 
-  async function fetchClip(text, rate) {
+  async function fetchClip(text, rate, format = 'wav') {
     // text/plain keeps this a simple request (no CORS preflight, which Apps Script cannot answer)
-    const r = await fetch(PROXY, { method: 'POST', body: JSON.stringify({ text, rate, format: FORMAT }) }).catch(() => null);
+    const r = await fetch(PROXY, { method: 'POST', body: JSON.stringify({ text, rate, format }) }).catch(() => null);
     if (!r) { problem = 'Die Google-Stimme ist ohne Internet nur für schon gehörte Sätze da.'; throw { code: 'offline' }; }
     let j = null;
     try { j = r.ok ? await r.json() : null; } catch {}
@@ -1794,6 +1796,7 @@ cloudVoice = (() => {
     const bin = atob(j.audio), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     problem = '';
+    if (format !== 'wav') return new Blob([bytes], { type: 'audio/mpeg' });
     smoothEdges(bytes);
     return new Blob([bytes], { type: 'audio/wav' });
   }
@@ -1812,10 +1815,10 @@ cloudVoice = (() => {
       }
     } catch {}
   }
-  async function clip(text, rate) {
-    const key = keyOf(text, rate);
+  async function clip(text, rate, format) {
+    const key = keyOf(text, rate, format);
     let blob = await cached(key);
-    if (!blob) { blob = await fetchClip(text, rate); keep(key, blob); }
+    if (!blob) { blob = await fetchClip(text, rate, format); keep(key, blob); }
     return blob;
   }
 
@@ -1823,10 +1826,10 @@ cloudVoice = (() => {
     label: 'Google-Stimme (Standard-H)',
     problem: () => problem,
     playing: () => !audio.paused && !audio.ended && audio.src !== silence,
-    async speak(text, rate) {
+    async speak(text, rate, kind) {
       const mine = ++turn;
       audio.pause();
-      const blob = await clip(text, rate);
+      const blob = await clip(text, rate, formatFor(kind));
       if (mine !== turn) return;                     // something else was tapped meanwhile
       if (url) URL.revokeObjectURL(url);
       url = URL.createObjectURL(blob);
